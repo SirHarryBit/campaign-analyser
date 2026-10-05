@@ -1,0 +1,17 @@
+node_modules/
+*.log
+.env
+# never commit real campaign data or exports
+data/
+*.db
+*.db-*
+*.xlsx
+*.csv
+!tests/fixtures/*.csv
+ROADMAP.md
+SETUP-META.md
+PLAN.md
+GUIDE.md
+DEPLOY-VERCEL.md
+# private notes (employer-specific)
+private/

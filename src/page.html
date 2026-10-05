@@ -1,0 +1,501 @@
+<title>Campaign Analyser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working tool — slim top bar with tabs, one centred column (max 1120px), tables scroll inside their own wrappers. */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --ink: #141c27;
+  --ink-2: #4d5868;
+  --line: #d8dee8;
+  --accent: #1d4fb8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ebfb;
+  --good: #1a7348;
+  --good-soft: #e1f2e9;
+  --warn: #8a5300;
+  --warn-soft: #fbefd8;
+  --bad: #b02a22;
+  --bad-soft: #fbe5e3;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s0: #b9c1cd;
+  --t-open: #2a78d6; --t-loose: #8a5300; --t-focused: #6b3fb0;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151b; --surface: #181e26; --surface-2: #202834; --ink: #e9edf3; --ink-2: #a5afbd; --line: #2e3846;
+    --accent: #7aa5ff; --accent-ink: #0d1626; --accent-soft: #1e2c46;
+    --good: #5fcf96; --good-soft: #163428; --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1c1a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s0: #4a5566;
+    --t-open: #7aa5ff; --t-loose: #f0b85a; --t-focused: #b99cf2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151b; --surface: #181e26; --surface-2: #202834; --ink: #e9edf3; --ink-2: #a5afbd; --line: #2e3846;
+  --accent: #7aa5ff; --accent-ink: #0d1626; --accent-soft: #1e2c46;
+  --good: #5fcf96; --good-soft: #163428; --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1c1a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s0: #4a5566;
+  --t-open: #7aa5ff; --t-loose: #f0b85a; --t-focused: #b99cf2;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+h1, h2, h3, h4 { font-family: var(--f-display); font-stretch: 88%; line-height: 1.2; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.muted, .hint { color: var(--ink-2); }
+.hint { font-size: 13px; }
+
+/* top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top-in { max-width: 1120px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand svg { flex: none; }
+.brand h1 { font-size: 21px; font-stretch: 80%; font-weight: 800; letter-spacing: .01em; }
+.tabs { display: flex; gap: 4px; }
+.tab { border: 0; background: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; min-height: 40px; }
+.tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.tab:hover { color: var(--ink); }
+.count { font: 500 12px var(--f-mono); background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 0 7px; }
+.count:empty { display: none; }
+
+main { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: grid; gap: 24px; }
+.panel { display: grid; gap: 20px; min-width: 0; }
+
+/* buttons */
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; min-height: 40px; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.small { padding: 4px 10px; min-height: 32px; font-size: 13px; }
+.btn.tiny { padding: 1px 8px; min-height: 24px; font-size: 12px; }
+.btn:hover { filter: brightness(1.05); }
+
+/* import */
+.import { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: stretch; }
+@media (max-width: 760px) { .import { grid-template-columns: 1fr; } }
+.dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 22px; background: var(--surface); display: grid; gap: 8px; align-content: center; }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone h2 { font-size: 20px; }
+.dropzone .pick { justify-self: start; }
+.actions { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 10px; align-content: start; }
+.actions .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirm { background: var(--bad-soft); border-radius: 8px; padding: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; font-weight: 500; }
+.notes, .notices { margin: 0; padding: 12px 14px 12px 32px; background: var(--surface-2); border-radius: 8px; display: grid; gap: 4px; font-size: 14px; }
+.notices { background: var(--warn-soft); color: var(--ink); }
+
+/* campaigns table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+thead th { font: 600 12px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
+tbody tr:last-child > * { border-bottom: 0; }
+.ctable { min-width: 860px; }
+.num { text-align: right; font-family: var(--f-mono); font-size: 14px; white-space: nowrap; }
+.cname { font-weight: 600; min-width: 220px; }
+.sub { display: block; font-weight: 400; font-size: 12.5px; color: var(--ink-2); }
+.sel { width: 36px; }
+.sel input { width: 18px; height: 18px; accent-color: var(--accent); }
+.act { text-align: right; white-space: nowrap; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: 0; background: var(--s0); }
+.s1 { background: var(--s1); } .s2 { background: var(--s2); } .s3 { background: var(--s3); } .s4 { background: var(--s4); } .s5 { background: var(--s5); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.t-open { color: var(--t-open); } .t-loose { color: var(--t-loose); } .t-focused { color: var(--t-focused); } .t-unknown { color: var(--ink-2); border-style: dashed; }
+.lv-row { display: inline-flex; gap: 3px; }
+.lv { font: 500 11px var(--f-mono); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); opacity: .55; }
+.lv.data { opacity: 1; border-color: var(--ink-2); }
+.lv.aim { opacity: 1; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.empty { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; display: grid; gap: 10px; justify-items: start; }
+.empty-title { font: 700 20px var(--f-display); }
+
+/* compare */
+.summary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .summary { grid-template-columns: 1fr; } }
+.lead-card, .ranking { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 10px; align-content: start; }
+.lead-card { border-color: var(--accent); }
+.eyebrow { font: 600 12px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.lead-name { font: 750 26px var(--f-display); font-stretch: 85%; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.kv div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.kv dt { font-size: 12px; color: var(--ink-2); }
+.kv dd { margin: 0; font: 500 17px var(--f-mono); }
+.ranking ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ranking li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.ranking li:last-child { border-bottom: 0; }
+.rank { font: 600 13px var(--f-mono); color: var(--ink-2); width: 18px; }
+.rname { font-weight: 600; flex: 1; min-width: 0; }
+.score { font: 500 14px var(--f-mono); }
+.dl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.dl-row > span:first-child { font-weight: 600; margin-right: 4px; }
+#dl-status { color: var(--ink-2); font-size: 13px; }
+.tier { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; }
+.tier header { display: grid; gap: 4px; }
+.tier-n { font: 600 12px var(--f-mono); color: var(--accent); }
+.tier h3 { font-size: 22px; }
+.tier header p { color: var(--ink-2); max-width: 70ch; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 28px; }
+.metric { display: grid; gap: 6px; min-width: 0; }
+.metric h4 { font: 600 14px var(--f-body); }
+.bar-row { display: grid; grid-template-columns: minmax(0, 9.5rem) 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+.bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.bar-track { height: 14px; display: flex; align-items: center; }
+.bar { height: 12px; border-radius: 0 4px 4px 0; display: block; min-width: 2px; }
+.bar-val { font: 500 13px var(--f-mono); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; min-width: 6.5rem; }
+.tag { font: 600 11px var(--f-body); padding: 1px 6px; border-radius: 4px; }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.block h3 { font-size: 20px; }
+.block ul, .block ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.block.two { grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 760px) { .block.two { grid-template-columns: 1fr; } .bar-row { grid-template-columns: minmax(0, 6.5rem) 1fr auto; } }
+.funnel { min-width: 640px; }
+.funnel th[scope="row"] { min-width: 190px; font-weight: 600; }
+.lvl { font: 600 12px var(--f-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+.funnel td { font-size: 13px; min-width: 150px; }
+.f-state { display: block; font-weight: 600; }
+.f-aim { background: var(--accent-soft); }
+.f-aim .f-state { color: var(--accent); }
+.f-data .f-state { color: var(--ink); }
+.f-none .f-state { color: var(--ink-2); }
+.f-kpi { display: block; font: 12px var(--f-mono); color: var(--ink-2); margin-top: 2px; }
+.sw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.sw { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.sw h4 { font-size: 17px; }
+.sw h5 { font: 600 13px var(--f-body); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 4px; }
+.good-t { color: var(--good); } .bad-t { color: var(--bad); }
+.sw-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .sw-cols { grid-template-columns: 1fr; } }
+.sw ul, .sw ol { font-size: 14px; }
+.tline { font-size: 13px; color: var(--ink-2); }
+.plan li { padding-left: 2px; }
+.whatif { background: var(--surface-2); border-radius: 8px; padding: 10px 14px; }
+
+/* dialogs */
+dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgb(10 14 20 / .45); }
+dialog form { display: grid; grid-template-rows: auto 1fr auto; max-height: calc(100dvh - 34px); }
+.dlg-head, .dlg-foot { padding: 14px 18px; display: flex; align-items: center; gap: 8px; }
+.dlg-head { border-bottom: 1px solid var(--line); }
+.dlg-head h2 { font-size: 20px; margin-right: auto; }
+.dlg-foot { border-top: 1px solid var(--line); justify-content: flex-end; flex-wrap: wrap; }
+.dlg-foot .left { margin-right: auto; }
+.dlg-body { overflow-y: auto; padding: 16px 18px; display: grid; gap: 16px; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 14px; margin: 0; }
+legend { font: 600 13px var(--f-body); padding: 0 6px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.flabel { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.field input, .field select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; }
+.field.missing input, .field.missing select { border-color: var(--warn); background: var(--warn-soft); }
+.need { font: 600 11px var(--f-body); color: var(--warn); background: var(--warn-soft); padding: 0 6px; border-radius: 4px; }
+.help { font-size: 12px; color: var(--ink-2); }
+.note { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.lv-picks { display: grid; gap: 6px; margin-top: 8px; }
+.lv-pick { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.lv-pick input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* guide */
+.guide { display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: start; }
+@media (max-width: 860px) { .guide { grid-template-columns: 1fr; } .guide nav { position: static !important; } }
+.guide nav { position: sticky; top: 80px; display: grid; gap: 4px; font-size: 14px; }
+.guide nav a { color: var(--ink-2); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+.guide nav a:hover { background: var(--surface-2); color: var(--ink); }
+.guide article { display: grid; gap: 28px; max-width: 72ch; min-width: 0; }
+.guide section { display: grid; gap: 10px; }
+.guide h2 { font-size: 26px; }
+.guide h3 { font-size: 19px; margin-top: 6px; }
+.guide ol, .guide ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.guide dl { margin: 0; display: grid; gap: 10px; }
+.guide dt { font-weight: 700; }
+.guide dd { margin: 2px 0 0; color: var(--ink-2); }
+.guide code, .mono { font-family: var(--f-mono); font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.funnel-fig { display: grid; gap: 6px; }
+.funnel-fig div { padding: 8px 12px; border-radius: 6px; background: var(--accent-soft); font-size: 14px; }
+.funnel-fig div b { font-family: var(--f-mono); margin-right: 6px; color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .bar { transition: width .3s ease; } }
+
+/* Charts */
+.charts { gap: 18px; }
+.charts-head { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: flex-end; }
+.charts-head p { max-width: 62ch; margin: 4px 0 0; }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.legend li { display: inline-flex; align-items: center; }
+.chart { margin: 0; padding-top: 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; min-width: 0; }
+.chart figcaption { display: grid; gap: 2px; }
+.chart h4 { margin: 0; font-size: 17px; text-wrap: balance; }
+.chart figcaption .muted { margin: 0; font-size: 13.5px; }
+.chart-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.chart-key span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-box { overflow-x: auto; }
+.chart-svg { display: block; overflow: visible; }
+.chart-svg .mark { cursor: default; outline: none; }
+.chart-svg .mark:hover > :not([fill="transparent"]), .chart-svg .mark:focus-visible > :not([fill="transparent"]) { filter: brightness(1.12) saturate(1.1); }
+.chart-svg .mark:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.chart-note { margin: 0; font-size: 14px; max-width: 75ch; padding: 8px 12px; background: var(--surface-2); border-radius: 8px; }
+.chart-empty { margin: 0; padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--ink-2); font-size: 14px; }
+.chart-data summary { cursor: pointer; font-size: 13px; color: var(--ink-2); width: max-content; }
+.chart-data .table-wrap { margin-top: 8px; }
+.chart-table { font-size: 13px; font-variant-numeric: tabular-nums; }
+#chart-tip { position: fixed; z-index: 60; pointer-events: none; max-width: 280px; white-space: pre-line; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 20px rgba(10, 20, 35, .16); }
+#chart-tip::first-line { font-weight: 600; }
+
+/* Meta connection */
+.source { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 16px; min-width: 0; }
+.source > * { min-width: 0; }
+#source-bar { min-width: 0; }
+.panel > * { min-width: 0; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; justify-self: start; flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 7px 12px; border-radius: 8px; font: 600 13.5px var(--f-body); color: var(--ink-2); cursor: pointer; min-height: 34px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(10, 20, 35, .12); }
+.connect-card { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.connect-card > div { max-width: 62ch; display: grid; gap: 6px; }
+.connect-card h2 { font-size: 20px; margin: 0; }
+.connect-card p { margin: 0; }
+.btn.fb { background: #1877f2; border-color: #1877f2; color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.demo-note { font-size: 13.5px; background: var(--warn-soft); padding: 6px 10px; border-radius: 8px; }
+.meta-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.meta-bar > * { min-width: 0; }
+.meta-bar label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
+.meta-bar select, .meta-bar input[type=date] { font: 14px var(--f-body); padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 100%; }
+.meta-bar .grow { flex: 1 1 220px; }
+.meta-bar .grow select { width: 100%; }
+.switch { display: inline-flex !important; grid-auto-flow: column; align-items: center; gap: 8px !important; text-transform: none !important; letter-spacing: 0 !important; font: 500 13.5px var(--f-body) !important; color: var(--ink) !important; min-height: 34px; cursor: pointer; }
+.switch input { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background .15s; flex: none; }
+.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(14px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sync-status { font-size: 13.5px; color: var(--ink-2); display: inline-flex; gap: 8px; align-items: center; min-height: 34px; }
+.sync-status.err { color: var(--bad); }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+.meta-sub { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13.5px; color: var(--ink-2); }
+.meta-sub .spacer { flex: 1; }
+.saved { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.saved .chip-btn { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); overflow: hidden; }
+.saved .chip-btn button { border: 0; background: none; padding: 5px 10px; font: 500 13px var(--f-body); color: var(--ink); cursor: pointer; }
+.saved .chip-btn button + button { padding: 5px 9px 5px 4px; color: var(--ink-2); }
+.linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.thumb { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex: none; background: var(--surface-2); }
+.cname .cn-row { display: flex; gap: 10px; align-items: center; }
+.status-chip { font: 600 10.5px var(--f-body); letter-spacing: .05em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; vertical-align: 1px; }
+.status-chip.on { color: var(--good); border-color: currentColor; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.inline-form input { flex: 1 1 220px; font: 14px var(--f-body); padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.share-out { display: grid; gap: 6px; width: 100%; font-size: 13.5px; }
+.share-out code { font: 13px var(--f-mono); background: var(--surface-2); padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; }
+.share-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.share-list li { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.share-list .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.usage { border-top: 1px solid var(--line); padding-top: 12px; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 4px; }
+.trend-switch { margin: 2px 0 4px; }
+.chart-svg .col .xhair { transition: opacity .1s; }
+.chart-svg .col:hover .xhair { opacity: .6; }
+.viewer-banner { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data-edit], body.viewer .owner-only { display: none !important; }
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M2 4h22l-8 9v8l-6 3V13z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6 8h14" stroke="currentColor" stroke-width="2"/></svg>
+      <h1>Campaign Analyser</h1>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab" data-tab="campaigns" aria-selected="true">Campaigns</button>
+      <button class="tab" data-tab="compare" aria-selected="false">Compare <span class="count" id="compare-count"></span></button>
+      <button class="tab" data-tab="guide" aria-selected="false">Guide</button>
+    </nav>
+    <button class="btn ghost small" id="btn-settings" aria-label="Settings: targets and thresholds">Targets &amp; settings</button>
+  </div>
+</header>
+
+<main>
+  <div class="banner viewer-banner" id="viewer-banner" hidden></div>
+  <section class="panel" id="panel-campaigns" aria-label="Campaigns">
+    <div id="source-bar"></div>
+    <p class="banner" id="example-banner" hidden>You are looking at example data for a made-up yoga studio. Upload your own export to replace it.</p>
+    <div class="import" id="file-import">
+      <div class="dropzone" id="dropzone">
+        <h2>Add your campaign export</h2>
+        <p class="muted">Drop a CSV or Excel file exported from Meta Ads Manager, Google Ads or a spreadsheet. Several files are fine. Your data stays in this browser.</p>
+        <label class="btn pick" for="file">Choose files</label>
+        <input id="file" type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" multiple class="sr">
+      </div>
+      <div class="actions">
+        <p class="eyebrow">Or</p>
+        <div class="row"><button class="btn ghost" id="btn-add">Add a campaign by hand</button><button class="btn ghost" id="btn-example">Load example data</button></div>
+        <div class="row"><button class="btn ghost small" id="btn-clear">Clear all campaigns</button></div>
+        <div class="confirm" id="confirm-clear" hidden><span>Remove every campaign from this browser?</span><button class="btn danger small" id="btn-clear-yes">Remove all</button><button class="btn ghost small" id="btn-clear-no">Keep them</button></div>
+      </div>
+    </div>
+    <ul class="notes" id="import-notes" hidden></ul>
+    <div id="campaign-list"></div>
+  </section>
+
+  <section class="panel" id="panel-compare" aria-label="Compare" hidden>
+    <div id="compare-body"></div>
+  </section>
+
+  <section class="panel" id="panel-guide" aria-label="Guide" hidden>
+    <div class="guide">
+      <nav aria-label="Guide contents">
+        <a href="#g-connect">Connecting Meta</a>
+        <a href="#g-start">Getting started</a>
+        <a href="#g-export">Exporting from Ads Manager</a>
+        <a href="#g-gaps">Filling gaps</a>
+        <a href="#g-read">Reading a comparison</a>
+        <a href="#g-charts">Reading the charts</a>
+        <a href="#g-funnel">The funnel levels</a>
+        <a href="#g-targeting">Targeting types</a>
+        <a href="#g-terms">Words you'll see</a>
+        <a href="#g-limits">What it can't tell you</a>
+      </nav>
+      <article>
+        <section id="g-connect"><h2>Connecting Meta</h2>
+          <p>When the app runs on its server (<code>npm start</code>), choose <b>Meta ads → Continue with Facebook</b>. Access is read-only: nothing in your ad account can be changed.</p>
+          <ol>
+            <li><b>Pick the ad account.</b> The first sync pulls the last 90 days. <b>Auto-sync daily</b> keeps it fresh; switch it off to sync only when you press <b>Sync now</b>.</li>
+            <li><b>Choose dates and level</b>: campaigns, ad sets or ads. The list shows everything that spent money in that period, biggest first, and ticks the top three with the same objective.</li>
+            <li><b>Fill what Meta can't know</b>, mainly qualified leads from your CRM. Meta's numbers are locked; your entries are kept across syncs.</li>
+            <li>On <b>Compare</b>, use <b>Save comparison</b> to come back to the same picks later, or <b>Share link</b> to send a read-only snapshot. Manage links under <b>Shared links</b>.</li>
+          </ol>
+          <p class="muted">Meta connections last 60 days; the app reminds you a week before. Without a Meta app configured, the server runs in demo mode with a simulated account. Setup steps are in SETUP-META.md.</p>
+        </section>
+        <section id="g-start"><h2>Getting started</h2>
+          <ol>
+            <li><b>Bring in campaigns.</b> On <b>Campaigns</b>, choose or drop a CSV/Excel export. One row per campaign is ideal; daily or ad-set rows with the same campaign name are added together.</li>
+            <li><b>Fill the gaps.</b> Rows with a yellow <b>Fill … gaps</b> button are missing something the analysis needs. Most often that's <i>qualified leads</i> (from your CRM), <i>universe</i> (audience size from Ads Manager) and <i>budget</i>.</li>
+            <li><b>Tick 2–5 campaigns</b> and open <b>Compare</b>.</li>
+            <li><b>Read top to bottom.</b> The leader and ranking come first, then the charts, the four comparison steps, the funnel, common ground and differences, fixes for each campaign, and a plan for your next one.</li>
+            <li><b>Download</b> the report as HTML (open it and print to PDF), the numbers as CSV, or both as an Excel workbook.</li>
+            <li>Set your own <b>targets</b> (CPL, qualified %) under <b>Targets &amp; settings</b> so verdicts are judged against what you need, not only against each other.</li>
+          </ol>
+        </section>
+        <section id="g-export"><h2>Exporting from Meta Ads Manager</h2>
+          <ol>
+            <li>Open Ads Manager → <b>Campaigns</b>, pick the date range, and select the campaigns.</li>
+            <li>Under <b>Columns</b>, include: Campaign name, Objective, Reporting starts, Reporting ends, Amount spent, Impressions, Reach, Frequency, Link clicks, Landing page views, Results, Result indicator, Leads, and Budget.</li>
+            <li>Click <b>Reports → Export table data</b> and choose <code>.csv</code> or <code>.xlsx</code>.</li>
+            <li>Optional: add your own columns <code>Qualified leads</code>, <code>Audience size</code> and <code>Targeting</code> in the spreadsheet before uploading. They are picked up automatically.</li>
+          </ol>
+          <p class="muted">Google Ads exports (Campaign, Cost, Impr., Clicks, Conversions) also work. Columns the tool doesn't recognise are ignored.</p>
+        </section>
+        <section id="g-gaps"><h2>Filling gaps</h2>
+          <p>Any blank or zero value that matters for a campaign's objective is marked <span class="need">needed</span> in the editor. Leave a field empty if you truly don't know it; the tool skips metrics it can't calculate instead of guessing.</p>
+          <ul>
+            <li><b>Universe</b>: the "Estimated audience size" Ads Manager shows while you set targeting. Use the middle of the range.</li>
+            <li><b>Qualified leads</b>: leads your team marked as worth following up. Without this, cheap-but-useless leads can look like a win.</li>
+            <li><b>Funnel levels</b>: set automatically from the objective. Tick extra levels if a campaign deliberately aimed at more than one.</li>
+          </ul>
+        </section>
+        <section id="g-read"><h2>Reading a comparison</h2>
+          <p>Campaigns are compared in the order a performance marketer would check them:</p>
+          <ol>
+            <li><b>Cost and budget</b>: cost per result (CPL for lead campaigns) and how much was spent. This counts most (3 points).</li>
+            <li><b>Audience and lead quality</b>: universe size, how much of it was reached, qualified lead % and cost per qualified lead (2 points).</li>
+            <li><b>Duration</b>: days run and leads per day (1 point).</li>
+            <li><b>Supporting signals</b>: CPM, CTR, CPC, frequency and landing-page rates. These explain why the numbers above look the way they do (½ point).</li>
+          </ol>
+          <p>For awareness campaigns the first step uses CPM instead of CPL; for traffic, CPC; for sales, cost per conversion. If you compare campaigns with different objectives, the tool warns you, because they were aiming at different things.</p>
+          <p>A "could be chance" notice means the difference between two campaigns is small compared with their sample sizes. Let them run longer before deciding.</p>
+        </section>
+        <section id="g-charts"><h2>Reading the charts</h2>
+          <p>The charts sit just below the ranking, in the same order as the comparison. Each one ends with a plain-English takeaway. Hover or tab onto any bar or dot for exact numbers, or open <b>Show as table</b>.</p>
+          <ul>
+            <li><b>Budget and spend</b>: each bar is what was spent, and the black line is the budget. A bar well short of its line means the platform couldn't spend the money, so that campaign's results may be understated.</li>
+            <li><b>Share of spend vs share of results</b>: compare a campaign's slice of the Spend row with its slice of the Leads or Qualified leads row. If the result slice is bigger, that campaign got more than its share for the money.</li>
+            <li><b>Cheap leads vs cheap good leads</b> (lead campaigns only): the hollow dot is cost per lead, the filled dot is cost per <i>qualified</i> lead. A long line means you paid for a lot of junk leads. Judge on the filled dot.</li>
+            <li><b>Cost vs quality map</b>: left is cheaper, up is better quality, bigger bubbles spent more. The grey lines mark the middle of the group, so the top-left corner holds the campaigns worth copying. Without qualified leads it uses click-through rate instead and says so.</li>
+            <li><b>Day by day</b> (Meta data only): 7-day rolling lines for cost per lead, CPC, CPM, CTR, spend or leads. Hover for every line's value that day. A cost line climbing for a week or more usually means the audience is tired of the ads.</li>
+            <li><b>When they ran</b>: run length, daily spend and overlaps. Two campaigns on the same platform at the same time can bid against each other for the same people.</li>
+          </ul>
+          <p class="muted">Charts that need data you haven't entered show a short note saying what to add. The downloaded HTML report includes the same charts.</p>
+        </section>
+        <section id="g-funnel"><h2>The funnel levels</h2>
+          <div class="funnel-fig" role="list">
+            <div role="listitem"><b>L1</b>Awareness: reach and impressions. Judged on CPM and reach.</div>
+            <div role="listitem" style="margin-inline:4%"><b>L2</b>Awareness: frequency. How often each person saw the ad; 1.5–3 is healthy.</div>
+            <div role="listitem" style="margin-inline:8%"><b>L3</b>Engagement: clicks and views. Judged on CTR, CPC and cost per view.</div>
+            <div role="listitem" style="margin-inline:12%"><b>L4</b>Engagement: landing page, lead forms and qualified leads. Judged on CPL, qualified % and cost per qualified lead.</div>
+            <div role="listitem" style="margin-inline:16%"><b>L5</b>Conversions: sales or sign-ups. Judged on cost per conversion and ROAS.</div>
+          </div>
+          <p>A campaign is <b>aimed at</b> the levels its objective targets. Numbers at other levels are a <b>side effect</b>: useful context, but not what the campaign should be judged on.</p>
+        </section>
+        <section id="g-targeting"><h2>Targeting types</h2>
+          <dl>
+            <div><dt><span class="chip t-open">Open</span></dt><dd>Almost no restrictions beyond location and age (e.g. Advantage+ audiences). The platform finds people itself. Cheap reach and leads, but quality can drop. Default: universe of 1 crore (10 million) or more.</dd></div>
+            <div><dt><span class="chip t-loose">Loose</span></dt><dd>A few interest, behaviour or demographic layers. A balance between cost and relevance. Default: between 10 lakh and 1 crore.</dd></div>
+            <div><dt><span class="chip t-focused">Focused</span></dt><dd>Narrow, stacked conditions, lookalikes, customer lists or retargeting. Higher CPM, usually better lead quality. Default: 10 lakh (1 million) or fewer.</dd></div>
+          </dl>
+          <p class="muted">Targeting notes win over universe size: "Advantage+" means open; "lookalike", "custom audience" or "retargeting" mean focused. You can override the type per campaign, and change the thresholds in settings.</p>
+        </section>
+        <section id="g-terms"><h2>Words you'll see</h2>
+          <dl>
+            <div><dt>CPL: cost per lead</dt><dd>Amount spent ÷ leads.</dd></div>
+            <div><dt>Qualified leads %</dt><dd>Qualified leads ÷ leads. Below your target (30% by default) means you are paying for leads your team won't use.</dd></div>
+            <div><dt>Cost per qualified lead</dt><dd>Amount spent ÷ qualified leads. Often the truest measure of a lead campaign.</dd></div>
+            <div><dt>Universe</dt><dd>The estimated number of people the targeting could reach.</dd></div>
+            <div><dt>Universe reached</dt><dd>Reach ÷ universe. Above 60% with high frequency means the audience is used up.</dd></div>
+            <div><dt>CPM</dt><dd>Cost per 1,000 impressions. High CPM usually means a narrow or competitive audience.</dd></div>
+            <div><dt>CTR: click-through rate</dt><dd>Link clicks ÷ impressions. Under 0.8% suggests the creative isn't working; above 2% is strong.</dd></div>
+            <div><dt>Frequency</dt><dd>Impressions ÷ reach. Above 3.5 risks ad fatigue.</dd></div>
+            <div><dt>Learning phase</dt><dd>The first days of a campaign while the platform figures out who to show it to. Results are unstable then, so judge after a week or more.</dd></div>
+            <div><dt>ROAS</dt><dd>Conversion value ÷ amount spent. Below 1× loses money on ads alone.</dd></div>
+          </dl>
+        </section>
+        <section id="g-limits"><h2>What it can't tell you</h2>
+          <ul>
+            <li>It sees totals, not creatives, so it can say a creative is weak but not which image to change.</li>
+            <li>Benchmarks (CTR under 0.8%, frequency above 3.5) are general rules of thumb across industries. Your own targets in settings matter more.</li>
+            <li>Recommendations are a starting point to discuss with whoever runs the ads, not a guarantee.</li>
+            <li>Everything stays in this browser. Clearing site data removes saved campaigns, so keep your export files.</li>
+          </ul>
+        </section>
+      </article>
+    </div>
+  </section>
+</main>
+
+<dialog id="editor" aria-labelledby="editor-title">
+  <form id="editor-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="editor-title">Edit campaign</h2><button type="button" class="btn ghost small" id="editor-cancel">Close</button></div>
+    <div class="dlg-body" id="editor-body"></div>
+    <div class="dlg-foot"><button type="button" class="btn ghost small left" id="editor-delete">Delete campaign</button><button type="submit" class="btn">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="settings" aria-labelledby="settings-title">
+  <form id="settings-form" method="dialog">
+    <div class="dlg-head"><h2 id="settings-title">Targets and settings</h2><button type="button" class="btn ghost small" id="settings-cancel">Close</button></div>
+    <div class="dlg-body">
+      <fieldset><legend>Your targets</legend><div class="fgrid">
+        <label class="field" for="s-targetCpl"><span class="flabel">Target CPL</span><input id="s-targetCpl" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 150"><span class="help">Leave blank to judge campaigns only against each other.</span></label>
+        <label class="field" for="s-targetQ"><span class="flabel">Target qualified leads %</span><input id="s-targetQ" type="number" min="0" max="100" step="1"><span class="help">Share of leads your team considers worth following up.</span></label>
+        <label class="field" for="s-currency"><span class="flabel">Currency</span><select id="s-currency"><option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option><option>AUD</option><option>CAD</option></select></label>
+      </div></fieldset>
+      <fieldset><legend>Targeting thresholds (universe size)</legend><div class="fgrid">
+        <label class="field" for="s-open"><span class="flabel">Open from</span><input id="s-open" type="number" min="0" step="1000"><span class="help">Default 1,00,00,000 (1 crore).</span></label>
+        <label class="field" for="s-focused"><span class="flabel">Focused up to</span><input id="s-focused" type="number" min="0" step="1000"><span class="help">Default 10,00,000 (10 lakh).</span></label>
+      </div></fieldset>
+    </div>
+    <div class="dlg-foot"><button type="submit" class="btn">Save settings</button></div>
+  <div id="usage-box" class="usage" hidden></div>
+  </form>
+</dialog>
+<dialog id="shares-dlg" aria-labelledby="shares-title">
+  <div class="dlg-head"><h2 id="shares-title">Shared links</h2><button type="button" class="btn ghost small" data-close="shares-dlg">Close</button></div>
+  <div class="dlg-body" id="shares-body"></div>
+</dialog>
+<div id="chart-tip" role="tooltip" hidden></div>

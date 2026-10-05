@@ -1,0 +1,10 @@
+data/
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+tests/
+mock/
+*.xlsx
+*.csv

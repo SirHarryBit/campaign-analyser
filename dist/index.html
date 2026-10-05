@@ -1,0 +1,2768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<title>Campaign Analyser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working tool — slim top bar with tabs, one centred column (max 1120px), tables scroll inside their own wrappers. */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --ink: #141c27;
+  --ink-2: #4d5868;
+  --line: #d8dee8;
+  --accent: #1d4fb8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ebfb;
+  --good: #1a7348;
+  --good-soft: #e1f2e9;
+  --warn: #8a5300;
+  --warn-soft: #fbefd8;
+  --bad: #b02a22;
+  --bad-soft: #fbe5e3;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s0: #b9c1cd;
+  --t-open: #2a78d6; --t-loose: #8a5300; --t-focused: #6b3fb0;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151b; --surface: #181e26; --surface-2: #202834; --ink: #e9edf3; --ink-2: #a5afbd; --line: #2e3846;
+    --accent: #7aa5ff; --accent-ink: #0d1626; --accent-soft: #1e2c46;
+    --good: #5fcf96; --good-soft: #163428; --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1c1a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s0: #4a5566;
+    --t-open: #7aa5ff; --t-loose: #f0b85a; --t-focused: #b99cf2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151b; --surface: #181e26; --surface-2: #202834; --ink: #e9edf3; --ink-2: #a5afbd; --line: #2e3846;
+  --accent: #7aa5ff; --accent-ink: #0d1626; --accent-soft: #1e2c46;
+  --good: #5fcf96; --good-soft: #163428; --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1c1a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s0: #4a5566;
+  --t-open: #7aa5ff; --t-loose: #f0b85a; --t-focused: #b99cf2;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+h1, h2, h3, h4 { font-family: var(--f-display); font-stretch: 88%; line-height: 1.2; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.muted, .hint { color: var(--ink-2); }
+.hint { font-size: 13px; }
+
+/* top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top-in { max-width: 1120px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand svg { flex: none; }
+.brand h1 { font-size: 21px; font-stretch: 80%; font-weight: 800; letter-spacing: .01em; }
+.tabs { display: flex; gap: 4px; }
+.tab { border: 0; background: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; min-height: 40px; }
+.tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.tab:hover { color: var(--ink); }
+.count { font: 500 12px var(--f-mono); background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 0 7px; }
+.count:empty { display: none; }
+
+main { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 64px; display: grid; gap: 24px; }
+.panel { display: grid; gap: 20px; min-width: 0; }
+
+/* buttons */
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; min-height: 40px; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.small { padding: 4px 10px; min-height: 32px; font-size: 13px; }
+.btn.tiny { padding: 1px 8px; min-height: 24px; font-size: 12px; }
+.btn:hover { filter: brightness(1.05); }
+
+/* import */
+.import { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: stretch; }
+@media (max-width: 760px) { .import { grid-template-columns: 1fr; } }
+.dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 22px; background: var(--surface); display: grid; gap: 8px; align-content: center; }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone h2 { font-size: 20px; }
+.dropzone .pick { justify-self: start; }
+.actions { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 10px; align-content: start; }
+.actions .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirm { background: var(--bad-soft); border-radius: 8px; padding: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; font-weight: 500; }
+.notes, .notices { margin: 0; padding: 12px 14px 12px 32px; background: var(--surface-2); border-radius: 8px; display: grid; gap: 4px; font-size: 14px; }
+.notices { background: var(--warn-soft); color: var(--ink); }
+
+/* campaigns table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+thead th { font: 600 12px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
+tbody tr:last-child > * { border-bottom: 0; }
+.ctable { min-width: 860px; }
+.num { text-align: right; font-family: var(--f-mono); font-size: 14px; white-space: nowrap; }
+.cname { font-weight: 600; min-width: 220px; }
+.sub { display: block; font-weight: 400; font-size: 12.5px; color: var(--ink-2); }
+.sel { width: 36px; }
+.sel input { width: 18px; height: 18px; accent-color: var(--accent); }
+.act { text-align: right; white-space: nowrap; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: 0; background: var(--s0); }
+.s1 { background: var(--s1); } .s2 { background: var(--s2); } .s3 { background: var(--s3); } .s4 { background: var(--s4); } .s5 { background: var(--s5); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.t-open { color: var(--t-open); } .t-loose { color: var(--t-loose); } .t-focused { color: var(--t-focused); } .t-unknown { color: var(--ink-2); border-style: dashed; }
+.lv-row { display: inline-flex; gap: 3px; }
+.lv { font: 500 11px var(--f-mono); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); opacity: .55; }
+.lv.data { opacity: 1; border-color: var(--ink-2); }
+.lv.aim { opacity: 1; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.empty { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; display: grid; gap: 10px; justify-items: start; }
+.empty-title { font: 700 20px var(--f-display); }
+
+/* compare */
+.summary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .summary { grid-template-columns: 1fr; } }
+.lead-card, .ranking { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 10px; align-content: start; }
+.lead-card { border-color: var(--accent); }
+.eyebrow { font: 600 12px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.lead-name { font: 750 26px var(--f-display); font-stretch: 85%; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.kv div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.kv dt { font-size: 12px; color: var(--ink-2); }
+.kv dd { margin: 0; font: 500 17px var(--f-mono); }
+.ranking ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ranking li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.ranking li:last-child { border-bottom: 0; }
+.rank { font: 600 13px var(--f-mono); color: var(--ink-2); width: 18px; }
+.rname { font-weight: 600; flex: 1; min-width: 0; }
+.score { font: 500 14px var(--f-mono); }
+.dl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.dl-row > span:first-child { font-weight: 600; margin-right: 4px; }
+#dl-status { color: var(--ink-2); font-size: 13px; }
+.tier { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; }
+.tier header { display: grid; gap: 4px; }
+.tier-n { font: 600 12px var(--f-mono); color: var(--accent); }
+.tier h3 { font-size: 22px; }
+.tier header p { color: var(--ink-2); max-width: 70ch; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 28px; }
+.metric { display: grid; gap: 6px; min-width: 0; }
+.metric h4 { font: 600 14px var(--f-body); }
+.bar-row { display: grid; grid-template-columns: minmax(0, 9.5rem) 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+.bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.bar-track { height: 14px; display: flex; align-items: center; }
+.bar { height: 12px; border-radius: 0 4px 4px 0; display: block; min-width: 2px; }
+.bar-val { font: 500 13px var(--f-mono); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; min-width: 6.5rem; }
+.tag { font: 600 11px var(--f-body); padding: 1px 6px; border-radius: 4px; }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.block h3 { font-size: 20px; }
+.block ul, .block ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.block.two { grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 760px) { .block.two { grid-template-columns: 1fr; } .bar-row { grid-template-columns: minmax(0, 6.5rem) 1fr auto; } }
+.funnel { min-width: 640px; }
+.funnel th[scope="row"] { min-width: 190px; font-weight: 600; }
+.lvl { font: 600 12px var(--f-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+.funnel td { font-size: 13px; min-width: 150px; }
+.f-state { display: block; font-weight: 600; }
+.f-aim { background: var(--accent-soft); }
+.f-aim .f-state { color: var(--accent); }
+.f-data .f-state { color: var(--ink); }
+.f-none .f-state { color: var(--ink-2); }
+.f-kpi { display: block; font: 12px var(--f-mono); color: var(--ink-2); margin-top: 2px; }
+.sw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.sw { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.sw h4 { font-size: 17px; }
+.sw h5 { font: 600 13px var(--f-body); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 4px; }
+.good-t { color: var(--good); } .bad-t { color: var(--bad); }
+.sw-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .sw-cols { grid-template-columns: 1fr; } }
+.sw ul, .sw ol { font-size: 14px; }
+.tline { font-size: 13px; color: var(--ink-2); }
+.plan li { padding-left: 2px; }
+.whatif { background: var(--surface-2); border-radius: 8px; padding: 10px 14px; }
+
+/* dialogs */
+dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgb(10 14 20 / .45); }
+dialog form { display: grid; grid-template-rows: auto 1fr auto; max-height: calc(100dvh - 34px); }
+.dlg-head, .dlg-foot { padding: 14px 18px; display: flex; align-items: center; gap: 8px; }
+.dlg-head { border-bottom: 1px solid var(--line); }
+.dlg-head h2 { font-size: 20px; margin-right: auto; }
+.dlg-foot { border-top: 1px solid var(--line); justify-content: flex-end; flex-wrap: wrap; }
+.dlg-foot .left { margin-right: auto; }
+.dlg-body { overflow-y: auto; padding: 16px 18px; display: grid; gap: 16px; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 14px; margin: 0; }
+legend { font: 600 13px var(--f-body); padding: 0 6px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.flabel { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.field input, .field select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; }
+.field.missing input, .field.missing select { border-color: var(--warn); background: var(--warn-soft); }
+.need { font: 600 11px var(--f-body); color: var(--warn); background: var(--warn-soft); padding: 0 6px; border-radius: 4px; }
+.help { font-size: 12px; color: var(--ink-2); }
+.note { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.lv-picks { display: grid; gap: 6px; margin-top: 8px; }
+.lv-pick { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.lv-pick input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* guide */
+.guide { display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: start; }
+@media (max-width: 860px) { .guide { grid-template-columns: 1fr; } .guide nav { position: static !important; } }
+.guide nav { position: sticky; top: 80px; display: grid; gap: 4px; font-size: 14px; }
+.guide nav a { color: var(--ink-2); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+.guide nav a:hover { background: var(--surface-2); color: var(--ink); }
+.guide article { display: grid; gap: 28px; max-width: 72ch; min-width: 0; }
+.guide section { display: grid; gap: 10px; }
+.guide h2 { font-size: 26px; }
+.guide h3 { font-size: 19px; margin-top: 6px; }
+.guide ol, .guide ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.guide dl { margin: 0; display: grid; gap: 10px; }
+.guide dt { font-weight: 700; }
+.guide dd { margin: 2px 0 0; color: var(--ink-2); }
+.guide code, .mono { font-family: var(--f-mono); font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.funnel-fig { display: grid; gap: 6px; }
+.funnel-fig div { padding: 8px 12px; border-radius: 6px; background: var(--accent-soft); font-size: 14px; }
+.funnel-fig div b { font-family: var(--f-mono); margin-right: 6px; color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .bar { transition: width .3s ease; } }
+
+/* Charts */
+.charts { gap: 18px; }
+.charts-head { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: flex-end; }
+.charts-head p { max-width: 62ch; margin: 4px 0 0; }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.legend li { display: inline-flex; align-items: center; }
+.chart { margin: 0; padding-top: 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; min-width: 0; }
+.chart figcaption { display: grid; gap: 2px; }
+.chart h4 { margin: 0; font-size: 17px; text-wrap: balance; }
+.chart figcaption .muted { margin: 0; font-size: 13.5px; }
+.chart-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.chart-key span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-box { overflow-x: auto; }
+.chart-svg { display: block; overflow: visible; }
+.chart-svg .mark { cursor: default; outline: none; }
+.chart-svg .mark:hover > :not([fill="transparent"]), .chart-svg .mark:focus-visible > :not([fill="transparent"]) { filter: brightness(1.12) saturate(1.1); }
+.chart-svg .mark:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.chart-note { margin: 0; font-size: 14px; max-width: 75ch; padding: 8px 12px; background: var(--surface-2); border-radius: 8px; }
+.chart-empty { margin: 0; padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--ink-2); font-size: 14px; }
+.chart-data summary { cursor: pointer; font-size: 13px; color: var(--ink-2); width: max-content; }
+.chart-data .table-wrap { margin-top: 8px; }
+.chart-table { font-size: 13px; font-variant-numeric: tabular-nums; }
+#chart-tip { position: fixed; z-index: 60; pointer-events: none; max-width: 280px; white-space: pre-line; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 20px rgba(10, 20, 35, .16); }
+#chart-tip::first-line { font-weight: 600; }
+
+/* Meta connection */
+.source { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 16px; min-width: 0; }
+.source > * { min-width: 0; }
+#source-bar { min-width: 0; }
+.panel > * { min-width: 0; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; justify-self: start; flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 7px 12px; border-radius: 8px; font: 600 13.5px var(--f-body); color: var(--ink-2); cursor: pointer; min-height: 34px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(10, 20, 35, .12); }
+.connect-card { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.connect-card > div { max-width: 62ch; display: grid; gap: 6px; }
+.connect-card h2 { font-size: 20px; margin: 0; }
+.connect-card p { margin: 0; }
+.btn.fb { background: #1877f2; border-color: #1877f2; color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.demo-note { font-size: 13.5px; background: var(--warn-soft); padding: 6px 10px; border-radius: 8px; }
+.meta-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.meta-bar > * { min-width: 0; }
+.meta-bar label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
+.meta-bar select, .meta-bar input[type=date] { font: 14px var(--f-body); padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 100%; }
+.meta-bar .grow { flex: 1 1 220px; }
+.meta-bar .grow select { width: 100%; }
+.switch { display: inline-flex !important; grid-auto-flow: column; align-items: center; gap: 8px !important; text-transform: none !important; letter-spacing: 0 !important; font: 500 13.5px var(--f-body) !important; color: var(--ink) !important; min-height: 34px; cursor: pointer; }
+.switch input { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background .15s; flex: none; }
+.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(14px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sync-status { font-size: 13.5px; color: var(--ink-2); display: inline-flex; gap: 8px; align-items: center; min-height: 34px; }
+.sync-status.err { color: var(--bad); }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+.meta-sub { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13.5px; color: var(--ink-2); }
+.meta-sub .spacer { flex: 1; }
+.saved { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.saved .chip-btn { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); overflow: hidden; }
+.saved .chip-btn button { border: 0; background: none; padding: 5px 10px; font: 500 13px var(--f-body); color: var(--ink); cursor: pointer; }
+.saved .chip-btn button + button { padding: 5px 9px 5px 4px; color: var(--ink-2); }
+.linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.thumb { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex: none; background: var(--surface-2); }
+.cname .cn-row { display: flex; gap: 10px; align-items: center; }
+.status-chip { font: 600 10.5px var(--f-body); letter-spacing: .05em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; vertical-align: 1px; }
+.status-chip.on { color: var(--good); border-color: currentColor; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.inline-form input { flex: 1 1 220px; font: 14px var(--f-body); padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.share-out { display: grid; gap: 6px; width: 100%; font-size: 13.5px; }
+.share-out code { font: 13px var(--f-mono); background: var(--surface-2); padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; }
+.share-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.share-list li { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.share-list .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.usage { border-top: 1px solid var(--line); padding-top: 12px; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 4px; }
+.trend-switch { margin: 2px 0 4px; }
+.chart-svg .col .xhair { transition: opacity .1s; }
+.chart-svg .col:hover .xhair { opacity: .6; }
+.viewer-banner { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data-edit], body.viewer .owner-only { display: none !important; }
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M2 4h22l-8 9v8l-6 3V13z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M6 8h14" stroke="currentColor" stroke-width="2"/></svg>
+      <h1>Campaign Analyser</h1>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab" data-tab="campaigns" aria-selected="true">Campaigns</button>
+      <button class="tab" data-tab="compare" aria-selected="false">Compare <span class="count" id="compare-count"></span></button>
+      <button class="tab" data-tab="guide" aria-selected="false">Guide</button>
+    </nav>
+    <button class="btn ghost small" id="btn-settings" aria-label="Settings: targets and thresholds">Targets &amp; settings</button>
+  </div>
+</header>
+
+<main>
+  <div class="banner viewer-banner" id="viewer-banner" hidden></div>
+  <section class="panel" id="panel-campaigns" aria-label="Campaigns">
+    <div id="source-bar"></div>
+    <p class="banner" id="example-banner" hidden>You are looking at example data for a made-up yoga studio. Upload your own export to replace it.</p>
+    <div class="import" id="file-import">
+      <div class="dropzone" id="dropzone">
+        <h2>Add your campaign export</h2>
+        <p class="muted">Drop a CSV or Excel file exported from Meta Ads Manager, Google Ads or a spreadsheet. Several files are fine. Your data stays in this browser.</p>
+        <label class="btn pick" for="file">Choose files</label>
+        <input id="file" type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" multiple class="sr">
+      </div>
+      <div class="actions">
+        <p class="eyebrow">Or</p>
+        <div class="row"><button class="btn ghost" id="btn-add">Add a campaign by hand</button><button class="btn ghost" id="btn-example">Load example data</button></div>
+        <div class="row"><button class="btn ghost small" id="btn-clear">Clear all campaigns</button></div>
+        <div class="confirm" id="confirm-clear" hidden><span>Remove every campaign from this browser?</span><button class="btn danger small" id="btn-clear-yes">Remove all</button><button class="btn ghost small" id="btn-clear-no">Keep them</button></div>
+      </div>
+    </div>
+    <ul class="notes" id="import-notes" hidden></ul>
+    <div id="campaign-list"></div>
+  </section>
+
+  <section class="panel" id="panel-compare" aria-label="Compare" hidden>
+    <div id="compare-body"></div>
+  </section>
+
+  <section class="panel" id="panel-guide" aria-label="Guide" hidden>
+    <div class="guide">
+      <nav aria-label="Guide contents">
+        <a href="#g-connect">Connecting Meta</a>
+        <a href="#g-start">Getting started</a>
+        <a href="#g-export">Exporting from Ads Manager</a>
+        <a href="#g-gaps">Filling gaps</a>
+        <a href="#g-read">Reading a comparison</a>
+        <a href="#g-charts">Reading the charts</a>
+        <a href="#g-funnel">The funnel levels</a>
+        <a href="#g-targeting">Targeting types</a>
+        <a href="#g-terms">Words you'll see</a>
+        <a href="#g-limits">What it can't tell you</a>
+      </nav>
+      <article>
+        <section id="g-connect"><h2>Connecting Meta</h2>
+          <p>When the app runs on its server (<code>npm start</code>), choose <b>Meta ads → Continue with Facebook</b>. Access is read-only: nothing in your ad account can be changed.</p>
+          <ol>
+            <li><b>Pick the ad account.</b> The first sync pulls the last 90 days. <b>Auto-sync daily</b> keeps it fresh; switch it off to sync only when you press <b>Sync now</b>.</li>
+            <li><b>Choose dates and level</b>: campaigns, ad sets or ads. The list shows everything that spent money in that period, biggest first, and ticks the top three with the same objective.</li>
+            <li><b>Fill what Meta can't know</b>, mainly qualified leads from your CRM. Meta's numbers are locked; your entries are kept across syncs.</li>
+            <li>On <b>Compare</b>, use <b>Save comparison</b> to come back to the same picks later, or <b>Share link</b> to send a read-only snapshot. Manage links under <b>Shared links</b>.</li>
+          </ol>
+          <p class="muted">Meta connections last 60 days; the app reminds you a week before. Without a Meta app configured, the server runs in demo mode with a simulated account. Setup steps are in SETUP-META.md.</p>
+        </section>
+        <section id="g-start"><h2>Getting started</h2>
+          <ol>
+            <li><b>Bring in campaigns.</b> On <b>Campaigns</b>, choose or drop a CSV/Excel export. One row per campaign is ideal; daily or ad-set rows with the same campaign name are added together.</li>
+            <li><b>Fill the gaps.</b> Rows with a yellow <b>Fill … gaps</b> button are missing something the analysis needs. Most often that's <i>qualified leads</i> (from your CRM), <i>universe</i> (audience size from Ads Manager) and <i>budget</i>.</li>
+            <li><b>Tick 2–5 campaigns</b> and open <b>Compare</b>.</li>
+            <li><b>Read top to bottom.</b> The leader and ranking come first, then the charts, the four comparison steps, the funnel, common ground and differences, fixes for each campaign, and a plan for your next one.</li>
+            <li><b>Download</b> the report as HTML (open it and print to PDF), the numbers as CSV, or both as an Excel workbook.</li>
+            <li>Set your own <b>targets</b> (CPL, qualified %) under <b>Targets &amp; settings</b> so verdicts are judged against what you need, not only against each other.</li>
+          </ol>
+        </section>
+        <section id="g-export"><h2>Exporting from Meta Ads Manager</h2>
+          <ol>
+            <li>Open Ads Manager → <b>Campaigns</b>, pick the date range, and select the campaigns.</li>
+            <li>Under <b>Columns</b>, include: Campaign name, Objective, Reporting starts, Reporting ends, Amount spent, Impressions, Reach, Frequency, Link clicks, Landing page views, Results, Result indicator, Leads, and Budget.</li>
+            <li>Click <b>Reports → Export table data</b> and choose <code>.csv</code> or <code>.xlsx</code>.</li>
+            <li>Optional: add your own columns <code>Qualified leads</code>, <code>Audience size</code> and <code>Targeting</code> in the spreadsheet before uploading. They are picked up automatically.</li>
+          </ol>
+          <p class="muted">Google Ads exports (Campaign, Cost, Impr., Clicks, Conversions) also work. Columns the tool doesn't recognise are ignored.</p>
+        </section>
+        <section id="g-gaps"><h2>Filling gaps</h2>
+          <p>Any blank or zero value that matters for a campaign's objective is marked <span class="need">needed</span> in the editor. Leave a field empty if you truly don't know it; the tool skips metrics it can't calculate instead of guessing.</p>
+          <ul>
+            <li><b>Universe</b>: the "Estimated audience size" Ads Manager shows while you set targeting. Use the middle of the range.</li>
+            <li><b>Qualified leads</b>: leads your team marked as worth following up. Without this, cheap-but-useless leads can look like a win.</li>
+            <li><b>Funnel levels</b>: set automatically from the objective. Tick extra levels if a campaign deliberately aimed at more than one.</li>
+          </ul>
+        </section>
+        <section id="g-read"><h2>Reading a comparison</h2>
+          <p>Campaigns are compared in the order a performance marketer would check them:</p>
+          <ol>
+            <li><b>Cost and budget</b>: cost per result (CPL for lead campaigns) and how much was spent. This counts most (3 points).</li>
+            <li><b>Audience and lead quality</b>: universe size, how much of it was reached, qualified lead % and cost per qualified lead (2 points).</li>
+            <li><b>Duration</b>: days run and leads per day (1 point).</li>
+            <li><b>Supporting signals</b>: CPM, CTR, CPC, frequency and landing-page rates. These explain why the numbers above look the way they do (½ point).</li>
+          </ol>
+          <p>For awareness campaigns the first step uses CPM instead of CPL; for traffic, CPC; for sales, cost per conversion. If you compare campaigns with different objectives, the tool warns you, because they were aiming at different things.</p>
+          <p>A "could be chance" notice means the difference between two campaigns is small compared with their sample sizes. Let them run longer before deciding.</p>
+        </section>
+        <section id="g-charts"><h2>Reading the charts</h2>
+          <p>The charts sit just below the ranking, in the same order as the comparison. Each one ends with a plain-English takeaway. Hover or tab onto any bar or dot for exact numbers, or open <b>Show as table</b>.</p>
+          <ul>
+            <li><b>Budget and spend</b>: each bar is what was spent, and the black line is the budget. A bar well short of its line means the platform couldn't spend the money, so that campaign's results may be understated.</li>
+            <li><b>Share of spend vs share of results</b>: compare a campaign's slice of the Spend row with its slice of the Leads or Qualified leads row. If the result slice is bigger, that campaign got more than its share for the money.</li>
+            <li><b>Cheap leads vs cheap good leads</b> (lead campaigns only): the hollow dot is cost per lead, the filled dot is cost per <i>qualified</i> lead. A long line means you paid for a lot of junk leads. Judge on the filled dot.</li>
+            <li><b>Cost vs quality map</b>: left is cheaper, up is better quality, bigger bubbles spent more. The grey lines mark the middle of the group, so the top-left corner holds the campaigns worth copying. Without qualified leads it uses click-through rate instead and says so.</li>
+            <li><b>Day by day</b> (Meta data only): 7-day rolling lines for cost per lead, CPC, CPM, CTR, spend or leads. Hover for every line's value that day. A cost line climbing for a week or more usually means the audience is tired of the ads.</li>
+            <li><b>When they ran</b>: run length, daily spend and overlaps. Two campaigns on the same platform at the same time can bid against each other for the same people.</li>
+          </ul>
+          <p class="muted">Charts that need data you haven't entered show a short note saying what to add. The downloaded HTML report includes the same charts.</p>
+        </section>
+        <section id="g-funnel"><h2>The funnel levels</h2>
+          <div class="funnel-fig" role="list">
+            <div role="listitem"><b>L1</b>Awareness: reach and impressions. Judged on CPM and reach.</div>
+            <div role="listitem" style="margin-inline:4%"><b>L2</b>Awareness: frequency. How often each person saw the ad; 1.5–3 is healthy.</div>
+            <div role="listitem" style="margin-inline:8%"><b>L3</b>Engagement: clicks and views. Judged on CTR, CPC and cost per view.</div>
+            <div role="listitem" style="margin-inline:12%"><b>L4</b>Engagement: landing page, lead forms and qualified leads. Judged on CPL, qualified % and cost per qualified lead.</div>
+            <div role="listitem" style="margin-inline:16%"><b>L5</b>Conversions: sales or sign-ups. Judged on cost per conversion and ROAS.</div>
+          </div>
+          <p>A campaign is <b>aimed at</b> the levels its objective targets. Numbers at other levels are a <b>side effect</b>: useful context, but not what the campaign should be judged on.</p>
+        </section>
+        <section id="g-targeting"><h2>Targeting types</h2>
+          <dl>
+            <div><dt><span class="chip t-open">Open</span></dt><dd>Almost no restrictions beyond location and age (e.g. Advantage+ audiences). The platform finds people itself. Cheap reach and leads, but quality can drop. Default: universe of 1 crore (10 million) or more.</dd></div>
+            <div><dt><span class="chip t-loose">Loose</span></dt><dd>A few interest, behaviour or demographic layers. A balance between cost and relevance. Default: between 10 lakh and 1 crore.</dd></div>
+            <div><dt><span class="chip t-focused">Focused</span></dt><dd>Narrow, stacked conditions, lookalikes, customer lists or retargeting. Higher CPM, usually better lead quality. Default: 10 lakh (1 million) or fewer.</dd></div>
+          </dl>
+          <p class="muted">Targeting notes win over universe size: "Advantage+" means open; "lookalike", "custom audience" or "retargeting" mean focused. You can override the type per campaign, and change the thresholds in settings.</p>
+        </section>
+        <section id="g-terms"><h2>Words you'll see</h2>
+          <dl>
+            <div><dt>CPL: cost per lead</dt><dd>Amount spent ÷ leads.</dd></div>
+            <div><dt>Qualified leads %</dt><dd>Qualified leads ÷ leads. Below your target (30% by default) means you are paying for leads your team won't use.</dd></div>
+            <div><dt>Cost per qualified lead</dt><dd>Amount spent ÷ qualified leads. Often the truest measure of a lead campaign.</dd></div>
+            <div><dt>Universe</dt><dd>The estimated number of people the targeting could reach.</dd></div>
+            <div><dt>Universe reached</dt><dd>Reach ÷ universe. Above 60% with high frequency means the audience is used up.</dd></div>
+            <div><dt>CPM</dt><dd>Cost per 1,000 impressions. High CPM usually means a narrow or competitive audience.</dd></div>
+            <div><dt>CTR: click-through rate</dt><dd>Link clicks ÷ impressions. Under 0.8% suggests the creative isn't working; above 2% is strong.</dd></div>
+            <div><dt>Frequency</dt><dd>Impressions ÷ reach. Above 3.5 risks ad fatigue.</dd></div>
+            <div><dt>Learning phase</dt><dd>The first days of a campaign while the platform figures out who to show it to. Results are unstable then, so judge after a week or more.</dd></div>
+            <div><dt>ROAS</dt><dd>Conversion value ÷ amount spent. Below 1× loses money on ads alone.</dd></div>
+          </dl>
+        </section>
+        <section id="g-limits"><h2>What it can't tell you</h2>
+          <ul>
+            <li>It sees totals, not creatives, so it can say a creative is weak but not which image to change.</li>
+            <li>Benchmarks (CTR under 0.8%, frequency above 3.5) are general rules of thumb across industries. Your own targets in settings matter more.</li>
+            <li>Recommendations are a starting point to discuss with whoever runs the ads, not a guarantee.</li>
+            <li>Everything stays in this browser. Clearing site data removes saved campaigns, so keep your export files.</li>
+          </ul>
+        </section>
+      </article>
+    </div>
+  </section>
+</main>
+
+<dialog id="editor" aria-labelledby="editor-title">
+  <form id="editor-form" method="dialog" novalidate>
+    <div class="dlg-head"><h2 id="editor-title">Edit campaign</h2><button type="button" class="btn ghost small" id="editor-cancel">Close</button></div>
+    <div class="dlg-body" id="editor-body"></div>
+    <div class="dlg-foot"><button type="button" class="btn ghost small left" id="editor-delete">Delete campaign</button><button type="submit" class="btn">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="settings" aria-labelledby="settings-title">
+  <form id="settings-form" method="dialog">
+    <div class="dlg-head"><h2 id="settings-title">Targets and settings</h2><button type="button" class="btn ghost small" id="settings-cancel">Close</button></div>
+    <div class="dlg-body">
+      <fieldset><legend>Your targets</legend><div class="fgrid">
+        <label class="field" for="s-targetCpl"><span class="flabel">Target CPL</span><input id="s-targetCpl" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 150"><span class="help">Leave blank to judge campaigns only against each other.</span></label>
+        <label class="field" for="s-targetQ"><span class="flabel">Target qualified leads %</span><input id="s-targetQ" type="number" min="0" max="100" step="1"><span class="help">Share of leads your team considers worth following up.</span></label>
+        <label class="field" for="s-currency"><span class="flabel">Currency</span><select id="s-currency"><option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option><option>AUD</option><option>CAD</option></select></label>
+      </div></fieldset>
+      <fieldset><legend>Targeting thresholds (universe size)</legend><div class="fgrid">
+        <label class="field" for="s-open"><span class="flabel">Open from</span><input id="s-open" type="number" min="0" step="1000"><span class="help">Default 1,00,00,000 (1 crore).</span></label>
+        <label class="field" for="s-focused"><span class="flabel">Focused up to</span><input id="s-focused" type="number" min="0" step="1000"><span class="help">Default 10,00,000 (10 lakh).</span></label>
+      </div></fieldset>
+    </div>
+    <div class="dlg-foot"><button type="submit" class="btn">Save settings</button></div>
+  <div id="usage-box" class="usage" hidden></div>
+  </form>
+</dialog>
+<dialog id="shares-dlg" aria-labelledby="shares-title">
+  <div class="dlg-head"><h2 id="shares-title">Shared links</h2><button type="button" class="btn ghost small" data-close="shares-dlg">Close</button></div>
+  <div class="dlg-body" id="shares-body"></div>
+</dialog>
+<div id="chart-tip" role="tooltip" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/*
+ * Campaign Analyser — core engine.
+ * Pure functions only (no DOM), so the same file runs in the browser and in Node tests.
+ * Exposes `CampaignCore` on window, and module.exports in Node.
+ */
+(function (root) {
+  'use strict';
+
+  // ---------- Constants ----------
+
+  const FUNNEL_LEVELS = [
+    { level: 1, stage: 'Awareness', name: 'Reach & impressions', kpis: ['impressions', 'reach', 'cpm'] },
+    { level: 2, stage: 'Awareness', name: 'Frequency', kpis: ['frequency'] },
+    { level: 3, stage: 'Engagement', name: 'Clicks & views', kpis: ['clicks', 'ctr', 'cpc', 'views', 'costPerView'] },
+    { level: 4, stage: 'Engagement', name: 'Landing page, lead forms & qualified leads', kpis: ['landingPageViews', 'leads', 'cpl', 'qualifiedPct', 'cpql'] },
+    { level: 5, stage: 'Conversion', name: 'Conversions', kpis: ['conversions', 'cpa', 'roas'] },
+  ];
+
+  const OBJECTIVES = {
+    awareness: { label: 'Awareness / reach', levels: [1, 2], primaryCost: 'cpm' },
+    traffic: { label: 'Traffic', levels: [3], primaryCost: 'cpc' },
+    engagement: { label: 'Engagement', levels: [3], primaryCost: 'cpc' },
+    video_views: { label: 'Video views', levels: [3], primaryCost: 'costPerView' },
+    leads: { label: 'Leads', levels: [4], primaryCost: 'cpl' },
+    conversions: { label: 'Sales / conversions', levels: [5], primaryCost: 'cpa' },
+  };
+
+  const PLATFORMS = ['Meta', 'Google', 'LinkedIn', 'YouTube', 'Other'];
+  const TARGETING = { open: 'Open', loose: 'Loose', focused: 'Focused', unknown: 'Not classified' };
+
+  const DEFAULT_SETTINGS = {
+    currency: 'INR',
+    targetCpl: null, // your own target, optional
+    targetQualifiedPct: 0.3, // 30%
+    openUniverseMin: 10000000, // ≥ 10M people ⇒ open
+    focusedUniverseMax: 1000000, // ≤ 1M people ⇒ focused
+    minLeadsForConfidence: 30,
+    learningPhaseDays: 7,
+  };
+
+  // Every field a campaign can hold. `input: true` means the user can type it in.
+  const FIELDS = [
+    { key: 'name', label: 'Campaign', type: 'text' },
+    { key: 'platform', label: 'Platform', type: 'select', options: PLATFORMS },
+    { key: 'objective', label: 'Objective', type: 'select', options: Object.keys(OBJECTIVES) },
+    { key: 'startDate', label: 'Start', type: 'date' },
+    { key: 'endDate', label: 'End', type: 'date' },
+    { key: 'budget', label: 'Budget', type: 'money' },
+    { key: 'spend', label: 'Spend', type: 'money' },
+    { key: 'impressions', label: 'Impressions', type: 'int' },
+    { key: 'reach', label: 'Reach', type: 'int' },
+    { key: 'frequency', label: 'Frequency', type: 'num' },
+    { key: 'clicks', label: 'Link clicks', type: 'int' },
+    { key: 'views', label: 'Video views', type: 'int' },
+    { key: 'landingPageViews', label: 'Landing page views', type: 'int' },
+    { key: 'leads', label: 'Leads', type: 'int' },
+    { key: 'qualifiedLeads', label: 'Qualified leads', type: 'int' },
+    { key: 'conversions', label: 'Conversions', type: 'int' },
+    { key: 'conversionValue', label: 'Conversion value', type: 'money' },
+    { key: 'universe', label: 'Universe (audience size)', type: 'int' },
+    { key: 'targeting', label: 'Targeting', type: 'select', options: ['auto', 'open', 'loose', 'focused'] },
+    { key: 'targetingNotes', label: 'Targeting notes', type: 'text' },
+  ];
+
+  // Header aliases for Meta Ads Manager, Google Ads and generic exports (lower-case, trimmed).
+  const ALIASES = {
+    name: ['campaign name', 'campaign', 'ad set name', 'ad name', 'name'],
+    platform: ['platform', 'publisher platform', 'channel', 'network'],
+    objective: ['objective', 'campaign objective', 'campaign type', 'buying type objective'],
+    startDate: ['reporting starts', 'starts', 'start date', 'start', 'campaign start date', 'day'],
+    endDate: ['reporting ends', 'ends', 'end date', 'end', 'campaign end date'],
+    budget: ['budget', 'campaign budget', 'ad set budget', 'lifetime budget', 'daily budget'],
+    spend: ['amount spent', 'spend', 'cost', 'amount spent (inr)', 'amount spent (usd)', 'total spent'],
+    impressions: ['impressions', 'impr.', 'impr'],
+    reach: ['reach', 'unique reach'],
+    frequency: ['frequency', 'avg. impr. freq. / user'],
+    clicks: ['link clicks', 'clicks', 'clicks (all)', 'outbound clicks'],
+    views: ['thruplays', 'video views', 'views', 'video plays', '3-second video plays'],
+    landingPageViews: ['landing page views', 'website landing page views'],
+    leads: ['leads', 'on-facebook leads', 'website leads', 'meta leads', 'lead form submissions'],
+    qualifiedLeads: ['qualified leads', 'qualified', 'sqls', 'mqls'],
+    conversions: ['conversions', 'purchases', 'website purchases', 'all conv.'],
+    conversionValue: ['conversion value', 'purchase conversion value', 'conv. value', 'purchases conversion value'],
+    universe: ['universe', 'audience size', 'estimated audience size', 'potential reach'],
+    targetingNotes: ['targeting', 'audience', 'audience name', 'targeting notes'],
+    resultIndicator: ['result indicator', 'result type'],
+    results: ['results'],
+  };
+
+  const ADDITIVE = ['budget', 'spend', 'impressions', 'clicks', 'views', 'landingPageViews', 'leads', 'qualifiedLeads', 'conversions', 'conversionValue'];
+
+  // ---------- Parsing helpers ----------
+
+  function normHeader(h) {
+    return String(h || '')
+      .toLowerCase()
+      .replace(/\((inr|usd|eur|gbp|aud|cad|sgd|aed)\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function detectCurrency(headers) {
+    for (const h of headers) {
+      const m = String(h).match(/\((INR|USD|EUR|GBP|AUD|CAD|SGD|AED)\)/i);
+      if (m) return m[1].toUpperCase();
+    }
+    return null;
+  }
+
+  function parseNumber(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    let s = String(v).trim();
+    if (!s || s === '-' || s === '--' || /^n\/?a$/i.test(s)) return null;
+    const pct = s.endsWith('%');
+    s = s.replace(/[₹$€£,\s%]/g, '').replace(/^(inr|usd|rs\.?)/i, '');
+    const n = Number(s);
+    if (!Number.isFinite(n)) return null;
+    return pct ? n / 100 : n;
+  }
+
+  function parseDate(v) {
+    if (v === null || v === undefined || v === '') return null;
+    if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+    if (typeof v === 'number' && v > 20000 && v < 80000) {
+      // Excel serial date
+      const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); // dd/mm/yyyy (India default)
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    const d = new Date(s);
+    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+  }
+
+  function guessObjective(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t) return null;
+    if (/lead/.test(t)) return 'leads';
+    if (/(purchase|sale|conversion|catalog|app install)/.test(t)) return 'conversions';
+    if (/(video|thruplay)/.test(t)) return 'video_views';
+    if (/(traffic|link click|landing page)/.test(t)) return 'traffic';
+    if (/(engag|post|message|like)/.test(t)) return 'engagement';
+    if (/(aware|reach|brand|impression)/.test(t)) return 'awareness';
+    return null;
+  }
+
+  /** Build {field: headerIndex} from a header row. */
+  function mapColumns(headers) {
+    const norm = headers.map(normHeader);
+    const map = {};
+    for (const [field, aliases] of Object.entries(ALIASES)) {
+      let idx = -1;
+      for (const a of aliases) {
+        idx = norm.indexOf(a);
+        if (idx !== -1) break;
+      }
+      if (idx === -1) {
+        // looser contains-match, but never let "cost per lead" count as "cost"
+        idx = norm.findIndex((h) => aliases.some((a) => a.length > 4 && h.startsWith(a) && !/per |rate|%/.test(h)));
+      }
+      if (idx !== -1) map[field] = idx;
+    }
+    return map;
+  }
+
+  function detectPlatform(headers) {
+    const n = headers.map(normHeader);
+    if (n.includes('amount spent') || n.includes('reporting starts') || n.includes('result indicator')) return 'Meta';
+    if (n.includes('impr.') || n.includes('all conv.') || n.includes('avg. cpc')) return 'Google';
+    return null;
+  }
+
+  /**
+   * Turn spreadsheet rows (array of arrays, first row = headers) into campaigns.
+   * Rows sharing a campaign name are merged (daily or ad-set breakdowns).
+   */
+  function rowsToCampaigns(rows, opts = {}) {
+    if (!rows || rows.length < 2) return { campaigns: [], mapping: {}, warnings: ['The file has no data rows.'] };
+    const headers = rows[0].map((h) => String(h ?? ''));
+    const mapping = mapColumns(headers);
+    const warnings = [];
+    const platformGuess = detectPlatform(headers) || opts.platform || null;
+    const currency = detectCurrency(headers);
+    if (mapping.name === undefined) warnings.push('No campaign name column found; rows were named "Campaign 1", "Campaign 2"….');
+    if (mapping.spend === undefined) warnings.push('No spend column found. Add spend by hand to get cost metrics.');
+
+    const byName = new Map();
+    rows.slice(1).forEach((r, i) => {
+      if (!r || r.every((c) => c === null || c === undefined || String(c).trim() === '')) return;
+      const get = (f) => (mapping[f] === undefined ? undefined : r[mapping[f]]);
+      const rawName = String(get('name') ?? '').trim();
+      if (/^(total|results from|grand total)/i.test(rawName)) return; // skip export summary rows
+      const name = rawName || `Campaign ${i + 1}`;
+      const c = { name };
+      for (const f of ['budget', 'spend', 'impressions', 'reach', 'frequency', 'clicks', 'views', 'landingPageViews', 'leads', 'qualifiedLeads', 'conversions', 'conversionValue', 'universe']) {
+        const v = parseNumber(get(f));
+        if (v !== null) c[f] = v;
+      }
+      // Meta "Results" column carries leads when the result indicator says so.
+      const indicator = String(get('resultIndicator') ?? '').toLowerCase();
+      const results = parseNumber(get('results'));
+      if (results !== null) {
+        if (/lead/.test(indicator) && c.leads === undefined) c.leads = results;
+        else if (/(purchase|conversion)/.test(indicator) && c.conversions === undefined) c.conversions = results;
+        else if (/(thruplay|video)/.test(indicator) && c.views === undefined) c.views = results;
+        else if (/(link_click|link click)/.test(indicator) && c.clicks === undefined) c.clicks = results;
+      }
+      c.startDate = parseDate(get('startDate'));
+      c.endDate = parseDate(get('endDate')) || c.startDate;
+      const p = String(get('platform') ?? '').trim();
+      c.platform = PLATFORMS.find((x) => x.toLowerCase() === p.toLowerCase()) || (/(facebook|instagram)/i.test(p) ? 'Meta' : null) || platformGuess || 'Other';
+      c.objective = guessObjective(get('objective')) || guessObjective(indicator) || null;
+      const notes = get('targetingNotes');
+      if (notes) c.targetingNotes = String(notes);
+
+      if (!byName.has(name)) byName.set(name, c);
+      else mergeInto(byName.get(name), c);
+    });
+
+    const campaigns = [...byName.values()].map((c) => normaliseCampaign({ ...c, currency: currency || undefined }));
+    if (campaigns.some((c) => c._mergedRows)) warnings.push('Some campaigns had several rows (daily or ad-set breakdown) and were added together. Reach cannot be added across rows, so it shows the largest single row; correct it if you know the real figure.');
+    return { campaigns, mapping, headers, currency, warnings };
+  }
+
+  function mergeInto(a, b) {
+    for (const f of ADDITIVE) if (b[f] !== undefined) a[f] = (a[f] || 0) + b[f];
+    if (b.reach !== undefined) a.reach = Math.max(a.reach || 0, b.reach);
+    if (b.universe !== undefined) a.universe = Math.max(a.universe || 0, b.universe);
+    if (b.startDate && (!a.startDate || b.startDate < a.startDate)) a.startDate = b.startDate;
+    if (b.endDate && (!a.endDate || b.endDate > a.endDate)) a.endDate = b.endDate;
+    a.frequency = undefined; // recomputed from impressions / reach
+    a._mergedRows = (a._mergedRows || 1) + 1;
+  }
+
+  let idCounter = 0;
+  function newId() {
+    idCounter += 1;
+    return 'c' + Date.now().toString(36) + idCounter.toString(36);
+  }
+
+  function normaliseCampaign(c) {
+    const out = { id: c.id || newId(), targeting: 'auto', platform: 'Other', ...c };
+    for (const f of FIELDS) {
+      if (['int', 'num', 'money'].includes(f.type) && out[f.key] !== undefined && out[f.key] !== null) {
+        const n = parseNumber(out[f.key]);
+        out[f.key] = n === null ? undefined : n;
+      }
+    }
+    return out;
+  }
+
+  // ---------- Metrics ----------
+
+  const div = (a, b) => (isNum(a) && isNum(b) && b > 0 ? a / b : null);
+  function isNum(v) {
+    return typeof v === 'number' && Number.isFinite(v);
+  }
+
+  function durationDays(c) {
+    if (!c.startDate || !c.endDate) return null;
+    const d = (Date.parse(c.endDate) - Date.parse(c.startDate)) / 86400000;
+    return isNaN(d) ? null : Math.max(1, Math.round(d) + 1);
+  }
+
+  function objectiveOf(c) {
+    return c.objective && OBJECTIVES[c.objective] ? c.objective : null;
+  }
+
+  function computeMetrics(c) {
+    // A zero in a tracking column usually means "not tracked" (e.g. instant forms have no landing page), not a real zero.
+    if (c.landingPageViews === 0) c = { ...c, landingPageViews: undefined };
+    const days = durationDays(c);
+    const frequency = isNum(c.frequency) && c.frequency > 0 ? c.frequency : div(c.impressions, c.reach);
+    const m = {
+      days,
+      spend: isNum(c.spend) ? c.spend : null,
+      budget: isNum(c.budget) ? c.budget : null,
+      budgetUsedPct: div(c.spend, c.budget),
+      dailySpend: div(c.spend, days),
+      impressions: c.impressions ?? null,
+      reach: c.reach ?? null,
+      frequency,
+      cpm: isNum(c.spend) && isNum(c.impressions) && c.impressions > 0 ? (c.spend / c.impressions) * 1000 : null,
+      clicks: c.clicks ?? null,
+      ctr: div(c.clicks, c.impressions),
+      cpc: div(c.spend, c.clicks),
+      views: c.views ?? null,
+      costPerView: div(c.spend, c.views),
+      landingPageViews: c.landingPageViews ?? null,
+      lpvRate: div(c.landingPageViews, c.clicks),
+      leads: c.leads ?? null,
+      cpl: div(c.spend, c.leads),
+      leadConvRate: isNum(c.landingPageViews) && c.landingPageViews > 0 ? div(c.leads, c.landingPageViews) : div(c.leads, c.clicks),
+      leadsPerDay: div(c.leads, days),
+      qualifiedLeads: c.qualifiedLeads ?? null,
+      qualifiedPct: div(c.qualifiedLeads, c.leads),
+      cpql: div(c.spend, c.qualifiedLeads),
+      conversions: c.conversions ?? null,
+      cpa: div(c.spend, c.conversions),
+      roas: div(c.conversionValue, c.spend),
+      universe: c.universe ?? null,
+      penetration: div(c.reach, c.universe),
+    };
+    return m;
+  }
+
+  // ---------- Funnel levels ----------
+
+  /** Levels the campaign is *aiming* at (objective, or the user's override). */
+  function targetLevels(c) {
+    if (Array.isArray(c.levels) && c.levels.length) return [...c.levels].sort();
+    const o = objectiveOf(c);
+    return o ? OBJECTIVES[o].levels : [];
+  }
+
+  /** Levels the campaign has *data* for. */
+  function dataLevels(c) {
+    const has = (k) => isNum(c[k]) && c[k] > 0;
+    const lv = [];
+    if (has('impressions') || has('reach')) lv.push(1);
+    if (has('frequency') || (has('impressions') && has('reach'))) lv.push(2);
+    if (has('clicks') || has('views')) lv.push(3);
+    if (has('landingPageViews') || has('leads') || has('qualifiedLeads')) lv.push(4);
+    if (has('conversions')) lv.push(5);
+    return lv;
+  }
+
+  // ---------- Targeting ----------
+
+  function classifyTargeting(c, settings = DEFAULT_SETTINGS) {
+    if (c.targeting && c.targeting !== 'auto' && TARGETING[c.targeting]) return { type: c.targeting, reason: 'Set by you.' };
+    const notes = String(c.targetingNotes || '').toLowerCase();
+    if (/(advantage\+|advantage plus|broad|no detailed targeting|open targeting)/.test(notes)) return { type: 'open', reason: 'Targeting notes mention broad / Advantage+ audiences.' };
+    if (/(lookalike|look-alike|custom audience|retarget|remarket|website visitors|customer list|engaged)/.test(notes)) return { type: 'focused', reason: 'Targeting notes mention a lookalike, custom or retargeting audience.' };
+    const u = c.universe;
+    if (isNum(u) && u > 0) {
+      if (u >= settings.openUniverseMin) return { type: 'open', reason: `Universe of ${fmtCompact(u)} is at or above the open threshold (${fmtCompact(settings.openUniverseMin)}).` };
+      if (u <= settings.focusedUniverseMax) return { type: 'focused', reason: `Universe of ${fmtCompact(u)} is at or below the focused threshold (${fmtCompact(settings.focusedUniverseMax)}).` };
+      return { type: 'loose', reason: `Universe of ${fmtCompact(u)} sits between the focused and open thresholds.` };
+    }
+    if (/(interest|behaviou?r|demographic|job title|layer)/.test(notes)) return { type: 'loose', reason: 'Targeting notes mention interest or demographic layers.' };
+    return { type: 'unknown', reason: 'Add the universe (audience size) or targeting notes to classify it.' };
+  }
+
+  // ---------- Missing data ----------
+
+  /** Inputs that matter for this campaign and are missing or zero. */
+  function missingInputs(c) {
+    const o = objectiveOf(c);
+    const need = ['spend', 'startDate', 'endDate', 'impressions', 'universe'];
+    if (!o) need.unshift('objective');
+    const lv = targetLevels(c);
+    if (lv.includes(1) || lv.includes(2)) need.push('reach');
+    if (lv.includes(3)) need.push('clicks');
+    if (lv.includes(4) || o === 'leads') need.push('leads', 'qualifiedLeads');
+    if (lv.includes(5)) need.push('conversions');
+    if (!c.budget) need.push('budget');
+    return [...new Set(need)].filter((k) => {
+      const v = c[k];
+      return v === undefined || v === null || v === '' || v === 0;
+    });
+  }
+
+  // ---------- Comparison ----------
+
+  // lower = better unless `higher: true`
+  const METRIC_DEFS = {
+    cpl: { label: 'Cost per lead (CPL)', fmt: 'money' },
+    cpql: { label: 'Cost per qualified lead', fmt: 'money' },
+    cpm: { label: 'Cost per 1,000 impressions (CPM)', fmt: 'money' },
+    cpc: { label: 'Cost per link click (CPC)', fmt: 'money' },
+    costPerView: { label: 'Cost per video view', fmt: 'money' },
+    cpa: { label: 'Cost per conversion (CPA)', fmt: 'money' },
+    spend: { label: 'Amount spent', fmt: 'money', neutral: true },
+    budget: { label: 'Budget', fmt: 'money', neutral: true },
+    dailySpend: { label: 'Average daily spend', fmt: 'money', neutral: true },
+    budgetUsedPct: { label: 'Budget used', fmt: 'pct', neutral: true },
+    universe: { label: 'Universe (audience size)', fmt: 'int', neutral: true },
+    penetration: { label: 'Universe reached', fmt: 'pct', higher: true },
+    qualifiedPct: { label: 'Qualified leads %', fmt: 'pct', higher: true },
+    days: { label: 'Duration (days)', fmt: 'int', neutral: true },
+    leadsPerDay: { label: 'Leads per day', fmt: 'num', higher: true },
+    leads: { label: 'Leads', fmt: 'int', higher: true },
+    reach: { label: 'Reach', fmt: 'int', higher: true },
+    impressions: { label: 'Impressions', fmt: 'int', higher: true },
+    frequency: { label: 'Frequency', fmt: 'num', band: [1.5, 3.5] },
+    ctr: { label: 'Click-through rate (CTR)', fmt: 'pct', higher: true },
+    lpvRate: { label: 'Clicks that loaded the page', fmt: 'pct', higher: true },
+    leadConvRate: { label: 'Page visitors who became leads', fmt: 'pct', higher: true },
+    roas: { label: 'Return on ad spend (ROAS)', fmt: 'x', higher: true },
+  };
+
+  /**
+   * The comparison order. For lead campaigns it follows the order Hridesh's
+   * marketing contact uses: CPL & budget → universe & qualified % → duration.
+   * For other objectives the cost metric of that funnel level replaces CPL.
+   */
+  function comparisonTiers(objective) {
+    const primary = objective && OBJECTIVES[objective] ? OBJECTIVES[objective].primaryCost : 'cpl';
+    return [
+      { tier: 1, title: 'Cost and budget', why: 'Compared first: what each result cost and how much money went in.', weight: 3, metrics: [primary, 'spend', 'budget', 'dailySpend'] },
+      { tier: 2, title: 'Audience and lead quality', why: 'Then: how big the audience was, how much of it you reached, and how many leads were worth having.', weight: 2, metrics: ['universe', 'penetration', 'qualifiedPct', 'cpql'] },
+      { tier: 3, title: 'Duration', why: 'Then: how long each ran. Short runs may still be in the platform\'s learning phase.', weight: 1, metrics: ['days', 'leadsPerDay'] },
+      { tier: 4, title: 'Supporting signals', why: 'These explain the numbers above: creative pull, audience fatigue and landing-page friction.', weight: 0.5, metrics: ['cpm', 'ctr', 'cpc', 'frequency', 'lpvRate', 'leadConvRate', 'roas'].filter((k) => k !== primary) },
+    ];
+  }
+
+  function dominantObjective(campaigns) {
+    const counts = {};
+    for (const c of campaigns) {
+      const o = objectiveOf(c) || 'leads';
+      counts[o] = (counts[o] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'leads';
+  }
+
+  function median(arr) {
+    const a = arr.filter(isNum).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+  }
+
+  /** Rank campaigns on one metric. Returns {values: {id: v}, best, worst}. */
+  function rankMetric(key, items) {
+    const def = METRIC_DEFS[key] || {};
+    const vals = items.map((it) => ({ id: it.c.id, v: it.m[key] })).filter((x) => isNum(x.v));
+    const res = { key, values: Object.fromEntries(items.map((it) => [it.c.id, it.m[key]])), best: null, worst: null, spread: null };
+    if (vals.length < 2 || def.neutral) return res;
+    let sorted;
+    if (def.band) {
+      const mid = (def.band[0] + def.band[1]) / 2;
+      sorted = [...vals].sort((a, b) => Math.abs(a.v - mid) - Math.abs(b.v - mid));
+    } else {
+      sorted = [...vals].sort((a, b) => (def.higher ? b.v - a.v : a.v - b.v));
+    }
+    res.best = sorted[0].id;
+    res.worst = sorted[sorted.length - 1].id;
+    const lo = Math.min(...vals.map((x) => x.v));
+    const hi = Math.max(...vals.map((x) => x.v));
+    res.spread = lo > 0 ? hi / lo - 1 : null;
+    return res;
+  }
+
+  /** Two-proportion z-test; returns two-sided p-value or null. */
+  function twoProportionP(x1, n1, x2, n2) {
+    if (![x1, n1, x2, n2].every(isNum) || n1 <= 0 || n2 <= 0) return null;
+    const p1 = x1 / n1, p2 = x2 / n2, p = (x1 + x2) / (n1 + n2);
+    const se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
+    if (se === 0) return null;
+    const z = Math.abs(p1 - p2) / se;
+    return 2 * (1 - normCdf(z));
+  }
+  function normCdf(z) {
+    // Abramowitz–Stegun approximation
+    const t = 1 / (1 + 0.2316419 * z);
+    const d = 0.3989423 * Math.exp((-z * z) / 2);
+    const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return 1 - prob;
+  }
+
+  function compare(campaigns, settings = DEFAULT_SETTINGS) {
+    const items = campaigns.map((c) => ({ c, m: computeMetrics(c), targeting: classifyTargeting(c, settings), levels: targetLevels(c), dataLevels: dataLevels(c) }));
+    const objective = dominantObjective(campaigns);
+    const tiers = comparisonTiers(objective).map((t) => ({ ...t, ranks: t.metrics.map((k) => rankMetric(k, items)) }));
+
+    // weighted score: winning a metric earns the tier weight, losing costs it
+    const scores = Object.fromEntries(items.map((it) => [it.c.id, 0]));
+    for (const t of tiers) for (const r of t.ranks) {
+      if (r.best) scores[r.best] += t.weight;
+      if (r.worst && r.worst !== r.best) scores[r.worst] -= t.weight / 2;
+    }
+    const ranking = [...items].sort((a, b) => scores[b.c.id] - scores[a.c.id]).map((it) => it.c.id);
+
+    const mixedObjectives = new Set(items.map((it) => objectiveOf(it.c) || 'unset')).size > 1;
+    const sharedLevels = items.length ? items.map((it) => it.levels).reduce((acc, lv) => acc.filter((x) => lv.includes(x))) : [];
+
+    // significance of qualified-% and CTR differences between best and worst
+    const significance = [];
+    const q = tiers[1].ranks.find((r) => r.key === 'qualifiedPct');
+    if (q && q.best && q.worst && q.best !== q.worst) {
+      const a = items.find((it) => it.c.id === q.best).c, b = items.find((it) => it.c.id === q.worst).c;
+      significance.push({ key: 'qualifiedPct', p: twoProportionP(a.qualifiedLeads, a.leads, b.qualifiedLeads, b.leads), best: q.best, worst: q.worst });
+    }
+    const ctr = rankMetric('ctr', items);
+    if (ctr.best && ctr.worst && ctr.best !== ctr.worst) {
+      const a = items.find((it) => it.c.id === ctr.best).c, b = items.find((it) => it.c.id === ctr.worst).c;
+      significance.push({ key: 'ctr', p: twoProportionP(a.clicks, a.impressions, b.clicks, b.impressions), best: ctr.best, worst: ctr.worst });
+    }
+
+    const result = { items, objective, tiers, scores, ranking, mixedObjectives, sharedLevels, significance, settings };
+    result.insights = buildInsights(result);
+    result.commonality = commonAndDifferent(result);
+    result.recommendations = buildRecommendations(result);
+    return result;
+  }
+
+  // ---------- Insights (rules engine) ----------
+
+  function buildInsights(r) {
+    const { items, settings } = r;
+    const med = (k) => median(items.map((it) => it.m[k]));
+    const medCpl = med('cpl'), medCpm = med('cpm'), medCtr = med('ctr');
+    const out = {};
+    for (const it of items) {
+      const { c, m } = it;
+      const s = [], w = [];
+      const obj = objectiveOf(c);
+      const name = c.name;
+
+      if (isNum(m.cpl) && isNum(medCpl) && items.length > 1) {
+        if (m.cpl <= medCpl * 0.8) s.push(`Leads came ${pctDiff(m.cpl, medCpl)} cheaper than the group's middle CPL.`);
+        else if (m.cpl >= medCpl * 1.2) w.push(`Leads cost ${pctDiff(m.cpl, medCpl)} more than the group's middle CPL.`);
+      }
+      if (isNum(settings.targetCpl) && isNum(m.cpl)) {
+        if (m.cpl <= settings.targetCpl) s.push(`CPL is within your target of ${fmtMoney(settings.targetCpl, settings.currency)}.`);
+        else w.push(`CPL is above your target of ${fmtMoney(settings.targetCpl, settings.currency)}.`);
+      }
+      if (isNum(m.qualifiedPct)) {
+        if (m.qualifiedPct >= settings.targetQualifiedPct) s.push(`${fmtPct(m.qualifiedPct)} of leads were qualified, at or above your ${fmtPct(settings.targetQualifiedPct)} target.`);
+        else w.push(`Only ${fmtPct(m.qualifiedPct)} of leads were qualified (target ${fmtPct(settings.targetQualifiedPct)}). Cheap leads that don't qualify are not cheap.`);
+      } else if (obj === 'leads' || isNum(m.leads)) {
+        w.push('Qualified leads are missing, so lead quality cannot be judged. Add the count from your CRM.');
+      }
+      if (isNum(m.ctr)) {
+        if (m.ctr >= 0.02) s.push(`Strong click-through rate (${fmtPct(m.ctr)}): the ad gets people to act.`);
+        else if (m.ctr < 0.008) w.push(`Low click-through rate (${fmtPct(m.ctr)}): the creative or offer isn't stopping the scroll.`);
+        else if (isNum(medCtr) && items.length > 1 && m.ctr > medCtr * 1.25) s.push(`Click-through rate is above the group's middle value.`);
+      }
+      if (isNum(m.frequency)) {
+        if (m.frequency > 3.5) w.push(`Frequency of ${m.frequency.toFixed(1)}: the same people saw the ad many times. Expect fatigue and rising costs.`);
+        else if (obj === 'awareness' && m.frequency < 1.5) w.push(`Frequency of ${m.frequency.toFixed(1)} is low for an awareness campaign; people may not remember one view.`);
+        else if (m.frequency >= 1.5 && m.frequency <= 3) s.push(`Healthy frequency (${m.frequency.toFixed(1)}): enough repeats without wearing people out.`);
+      }
+      if (isNum(m.cpm) && isNum(medCpm) && items.length > 1 && m.cpm > medCpm * 1.5) w.push(`CPM is ${pctDiff(m.cpm, medCpm)} above the group: the audience is expensive to reach, often because it is narrow or heavily contested.`);
+      if (isNum(m.lpvRate) && m.lpvRate < 0.6) w.push(`Only ${fmtPct(m.lpvRate)} of clicks loaded the landing page. Check page speed and accidental clicks.`);
+      if (isNum(m.leadConvRate) && isNum(c.landingPageViews) && m.leadConvRate < 0.05) w.push(`Only ${fmtPct(m.leadConvRate)} of page visitors became leads. The page or form has friction.`);
+      if (isNum(m.leadConvRate) && isNum(c.landingPageViews) && m.leadConvRate >= 0.12) s.push(`${fmtPct(m.leadConvRate)} of page visitors became leads: the page converts well.`);
+      if (isNum(m.penetration)) {
+        if (m.penetration > 0.6 && isNum(m.frequency) && m.frequency > 2.5) w.push(`Reached ${fmtPct(m.penetration)} of the universe with high frequency: the audience is saturated.`);
+        else if (m.penetration < 0.05 && isNum(m.days) && m.days >= 14) w.push(`Reached only ${fmtPct(m.penetration)} of the universe in ${m.days} days: the budget is small for this audience.`);
+      }
+      if (isNum(m.days) && m.days < settings.learningPhaseDays) w.push(`Ran only ${m.days} day${m.days === 1 ? '' : 's'}; platforms are usually still learning in the first week, so results are less reliable.`);
+      if (isNum(m.leads) && m.leads > 0 && m.leads < settings.minLeadsForConfidence) w.push(`${m.leads} leads is a small sample; treat the percentages as rough.`);
+      if (isNum(m.budgetUsedPct) && m.budgetUsedPct < 0.7) w.push(`Spent ${fmtPct(m.budgetUsedPct)} of its budget: the platform struggled to deliver, often a sign the audience is too narrow or the bid too low.`);
+      if (isNum(m.roas)) (m.roas >= 3 ? s : m.roas < 1 ? w : s).push(`Return on ad spend of ${m.roas.toFixed(2)}×${m.roas < 1 ? ', below break-even' : ''}.`);
+
+      const t = it.targeting.type;
+      if (t === 'open' && isNum(m.qualifiedPct) && m.qualifiedPct < settings.targetQualifiedPct) w.push('Open targeting with low lead quality: the platform is finding cheap leads, not the right ones.');
+      if (t === 'focused' && isNum(m.cpm) && isNum(medCpm) && m.cpm > medCpm * 1.3) w.push('Focused targeting is pushing the CPM up.');
+      if (t === 'focused' && isNum(m.qualifiedPct) && m.qualifiedPct >= settings.targetQualifiedPct) s.push('Focused targeting is paying off in lead quality.');
+
+      out[c.id] = { strengths: s, weaknesses: w };
+    }
+    return out;
+  }
+
+  function commonAndDifferent(r) {
+    const { items } = r;
+    if (items.length < 2) return { common: [], different: [] };
+    const common = [], different = [];
+    const same = (f, label, fmt = (x) => x) => {
+      const vals = items.map(f);
+      const uniq = [...new Set(vals.map(String))];
+      if (uniq.length === 1 && vals[0] !== null && vals[0] !== undefined && vals[0] !== 'unknown') common.push(`${label}: ${fmt(vals[0])}`);
+      else different.push(`${label}: ${items.map((it, i) => `${it.c.name} — ${vals[i] === null || vals[i] === undefined ? 'not set' : fmt(vals[i])}`).join('; ')}`);
+    };
+    same((it) => it.c.platform, 'Platform');
+    same((it) => objectiveOf(it.c), 'Objective', (o) => OBJECTIVES[o]?.label || o);
+    same((it) => it.targeting.type, 'Targeting', (t) => TARGETING[t]);
+    same((it) => it.levels.join(','), 'Funnel levels aimed at', (s) => (s ? s.split(',').map((l) => 'L' + l).join(' + ') : 'not set'));
+    const spreads = [];
+    for (const t of r.tiers) for (const rk of t.ranks) if (isNum(rk.spread) && rk.spread >= 0.25) spreads.push({ t: t.tier, rk });
+    // keep the order of importance, and only the five biggest gaps
+    spreads.sort((a, b) => a.t - b.t || b.rk.spread - a.rk.spread).slice(0, 5).forEach(({ rk }) => {
+      const best = items.find((it) => it.c.id === rk.best), worst = items.find((it) => it.c.id === rk.worst);
+      different.push(`${METRIC_DEFS[rk.key].label}: ${best ? best.c.name : ''} is best, ${worst ? worst.c.name : ''} weakest (${Math.round(rk.spread * 100)}% apart)`);
+    });
+    return { common, different };
+  }
+
+  // ---------- Recommendations ----------
+
+  function buildRecommendations(r) {
+    const { items, settings, ranking } = r;
+    const recs = { improve: {}, newCampaign: [], reallocation: null };
+    const byId = Object.fromEntries(items.map((it) => [it.c.id, it]));
+
+    for (const it of items) {
+      const { c, m } = it;
+      const list = [];
+      if (isNum(m.frequency) && m.frequency > 3.5) list.push('Refresh the creative (new hook, new visual) and widen the audience to bring frequency under 3.');
+      if (isNum(m.ctr) && m.ctr < 0.008) list.push('Test 2–3 new creatives with a clearer first line and a visible offer; keep the one with the best CTR after 3–4 days.');
+      if (isNum(m.qualifiedPct) && m.qualifiedPct < settings.targetQualifiedPct) list.push('Add a qualifying question to the lead form (budget, location or timeline) and switch the form to "higher intent" so fewer casual leads get through.');
+      if (it.targeting.type === 'open' && isNum(m.qualifiedPct) && m.qualifiedPct < settings.targetQualifiedPct) list.push('Move from open to loose targeting: layer 2–3 interests or a lookalike of your qualified leads.');
+      if (it.targeting.type === 'focused' && isNum(m.cpm) && (isNum(m.budgetUsedPct) ? m.budgetUsedPct < 0.8 : true) && isNum(m.cpl) && m.cpl > (median(items.map((x) => x.m.cpl)) || Infinity)) list.push('Loosen the focused audience (fewer stacked conditions, or a 1–3% lookalike) so the platform has room to find cheaper leads.');
+      if (isNum(m.lpvRate) && m.lpvRate < 0.6) list.push('Speed up the landing page (aim for under 3 seconds on mobile) and check that ad placements are not causing accidental clicks.');
+      if (isNum(m.leadConvRate) && isNum(c.landingPageViews) && m.leadConvRate < 0.05) list.push('Cut form fields to the essentials and move the form above the fold, or try an instant (in-platform) lead form.');
+      if (isNum(m.days) && m.days < settings.learningPhaseDays) list.push(`Let it run at least ${settings.learningPhaseDays}–14 days without major edits before judging it.`);
+      if (isNum(m.penetration) && m.penetration < 0.05 && isNum(m.days) && m.days >= 14) list.push('Raise the daily budget or narrow the universe so the campaign reaches a meaningful share of it.');
+      if (isNum(m.penetration) && m.penetration > 0.6) list.push('The audience is nearly used up: add a new audience or a lookalike before scaling budget.');
+      if (!list.length) list.push(ranking[0] === c.id ? 'This is the best performer. Scale its budget gradually (about 20% every few days) and watch CPL.' : 'No major problems found. Test one change at a time (creative, then audience) to beat the leader.');
+      recs.improve[c.id] = list;
+    }
+
+    // New campaign blueprint from the leader
+    const lead = byId[ranking[0]];
+    if (lead) {
+      const lm = lead.m;
+      const obj = objectiveOf(lead.c) || r.objective;
+      recs.newCampaign.push(`Objective: ${OBJECTIVES[obj]?.label || 'Leads'}, the same as the best performer (${lead.c.name}).`);
+      if (lead.targeting.type !== 'unknown') recs.newCampaign.push(`Targeting: start ${TARGETING[lead.targeting.type].toLowerCase()}, which worked best here${isNum(lead.c.universe) ? `, with a universe around ${fmtCompact(lead.c.universe)}` : ''}.`);
+      recs.newCampaign.push(`Duration: at least 14 days, so the platform finishes learning and you have enough leads to judge quality.`);
+      if (isNum(lm.cpl)) {
+        const target = isNum(settings.targetCpl) ? Math.min(settings.targetCpl, lm.cpl) : lm.cpl;
+        const leadsGoal = 100;
+        recs.newCampaign.push(`Budget: about ${fmtMoney(target * leadsGoal, settings.currency)} for ~${leadsGoal} leads at a ${fmtMoney(target, settings.currency)} CPL (${fmtMoney((target * leadsGoal) / 14, settings.currency)} a day over 14 days). Expect CPL to rise as you scale.`);
+      }
+      if (isNum(lm.frequency)) recs.newCampaign.push('Frequency: keep it between 1.5 and 3; refresh creative once it passes 3.');
+      recs.newCampaign.push('Lead form: include one qualifying question, and send qualified-lead counts back from your CRM every week so this tool can judge quality.');
+      recs.newCampaign.push('Creative: reuse the angle of the best ad from the leader, and test 2–3 variations against it.');
+    }
+
+    // Budget reallocation what-if: move 20% from worst CPL to best CPL
+    const cplRank = r.tiers[0].ranks[0];
+    if (cplRank && cplRank.key === 'cpl' && cplRank.best && cplRank.worst && cplRank.best !== cplRank.worst) {
+      const b = byId[cplRank.best].m, w = byId[cplRank.worst].m;
+      if (isNum(w.spend) && isNum(b.cpl) && isNum(w.cpl)) {
+        const moved = w.spend * 0.2;
+        const lost = moved / w.cpl, gained = moved / (b.cpl * 1.15); // assume ~15% CPL rise when scaling
+        recs.reallocation = {
+          from: byId[cplRank.worst].c.name,
+          to: byId[cplRank.best].c.name,
+          moved,
+          netLeads: gained - lost,
+          text: `Moving 20% of ${byId[cplRank.worst].c.name}'s spend (${fmtMoney(moved, settings.currency)}) to ${byId[cplRank.best].c.name} would give roughly ${Math.round(gained - lost)} more leads, assuming its CPL rises about 15% as it scales.`,
+        };
+      }
+    }
+    return recs;
+  }
+
+  // ---------- Formatting ----------
+
+  function fmtMoney(v, currency = 'INR') {
+    if (!isNum(v)) return '—';
+    const opts = { style: 'currency', currency, maximumFractionDigits: v >= 100 ? 0 : 2 };
+    try {
+      return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', opts).format(v);
+    } catch (e) {
+      return currency + ' ' + v.toFixed(2);
+    }
+  }
+  function fmtPct(v) {
+    if (!isNum(v)) return '—';
+    return (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
+  }
+  function fmtInt(v) {
+    if (!isNum(v)) return '—';
+    return new Intl.NumberFormat('en-IN').format(Math.round(v));
+  }
+  function fmtCompact(v) {
+    if (!isNum(v)) return '—';
+    if (v >= 1e7) return (v / 1e7).toFixed(v >= 1e8 ? 0 : 1) + ' crore';
+    if (v >= 1e5) return (v / 1e5).toFixed(v >= 1e6 ? 0 : 1) + ' lakh';
+    return fmtInt(v);
+  }
+  function pctDiff(a, b) {
+    return Math.round(Math.abs(a / b - 1) * 100) + '%';
+  }
+  function formatMetric(key, v, currency) {
+    const def = METRIC_DEFS[key] || {};
+    switch (def.fmt) {
+      case 'money': return fmtMoney(v, currency);
+      case 'pct': return fmtPct(v);
+      case 'int': return fmtInt(v);
+      case 'x': return isNum(v) ? v.toFixed(2) + '×' : '—';
+      default: return isNum(v) ? v.toFixed(2) : '—';
+    }
+  }
+
+  // ---------- Exports ----------
+
+  function toRows(result) {
+    const keys = ['spend', 'budget', 'days', 'dailySpend', 'impressions', 'reach', 'frequency', 'cpm', 'clicks', 'ctr', 'cpc', 'views', 'costPerView', 'landingPageViews', 'lpvRate', 'leads', 'cpl', 'leadConvRate', 'qualifiedLeads', 'qualifiedPct', 'cpql', 'conversions', 'cpa', 'roas', 'universe', 'penetration'];
+    const head = ['Campaign', 'Platform', 'Objective', 'Targeting', 'Start', 'End', 'Score', ...keys.map((k) => (METRIC_DEFS[k] ? METRIC_DEFS[k].label : k))];
+    const rows = [head];
+    for (const it of result.items) {
+      rows.push([it.c.name, it.c.platform, OBJECTIVES[objectiveOf(it.c)]?.label || '', TARGETING[it.targeting.type], it.c.startDate || '', it.c.endDate || '', result.scores[it.c.id], ...keys.map((k) => (isNum(it.m[k]) ? +it.m[k].toFixed(4) : ''))]);
+    }
+    return rows;
+  }
+
+  function toCsv(result) {
+    const esc = (v) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    return toRows(result).map((r) => r.map(esc).join(',')).join('\n');
+  }
+
+  const api = {
+    FUNNEL_LEVELS, OBJECTIVES, PLATFORMS, TARGETING, DEFAULT_SETTINGS, FIELDS, METRIC_DEFS,
+    parseNumber, parseDate, mapColumns, rowsToCampaigns, normaliseCampaign, newId,
+    durationDays, computeMetrics, targetLevels, dataLevels, classifyTargeting, missingInputs,
+    comparisonTiers, compare, rankMetric, twoProportionP, median,
+    fmtMoney, fmtPct, fmtInt, fmtCompact, formatMetric, toCsv, toRows, objectiveOf, isNum,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.CampaignCore = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Campaign Analyser – charts.
+ * Pure functions that turn a comparison result into SVG strings, so the same
+ * charts render in the app (themed through CSS variables, custom tooltips) and
+ * in the downloaded report (fixed light colours, native <title> tooltips).
+ * Exposes `CampaignCharts` on window, and module.exports in Node.
+ */
+(function (root) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const isNum = (v) => typeof v === 'number' && isFinite(v);
+  const CH = 7; // rough width of one 13px character, for truncation
+
+  // Palettes. App: CSS variables (follow light/dark). Report: fixed light values.
+  const PAL_APP = {
+    s: ['var(--s0)', 'var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'],
+    ink: 'var(--ink)', ink2: 'var(--ink-2)', line: 'var(--line)', surface: 'var(--surface)',
+  };
+  const PAL_PRINT = {
+    s: ['#b9c1cd', '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'],
+    ink: '#141c27', ink2: '#4d5868', line: '#d8dee8', surface: '#ffffff',
+  };
+
+  // ---------- helpers ----------
+  function trunc(s, px) {
+    const max = Math.max(4, Math.floor(px / CH));
+    s = String(s ?? '');
+    return s.length > max ? s.slice(0, max - 1) + '…' : s;
+  }
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    return [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw - 1e-12);
+  }
+  function ticks(max, n = 4) {
+    if (!(max > 0)) return [0, 1];
+    const step = niceStep(max / n);
+    const out = [];
+    for (let v = 0; v < max + step - 1e-9; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+  function symbol(C, cur) {
+    return C.fmtMoney(0, cur).replace(/[\d.,\s]/g, '') || cur + ' ';
+  }
+  function shortMoney(C, cur, v) {
+    const sym = symbol(C, cur);
+    const t = (x) => String(+x.toFixed(x < 10 ? 1 : 0));
+    if (cur === 'INR') {
+      if (v >= 1e7) return sym + t(v / 1e7) + 'Cr';
+      if (v >= 1e5) return sym + t(v / 1e5) + 'L';
+    } else if (v >= 1e6) return sym + t(v / 1e6) + 'M';
+    if (v >= 1e3) return sym + t(v / 1e3) + 'k';
+    return sym + t(v);
+  }
+  const pct0 = (v) => Math.round(v * 100) + '%';
+  const shortPct = (v) => (v < 0.1 ? +(v * 100).toFixed(1) : Math.round(v * 100)) + '%';
+  function fmtDate(iso) {
+    const d = new Date(iso + 'T00:00:00Z');
+    return d.getUTCDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+  }
+  const DAY = 86400000;
+
+  // A bar with a 4px rounded data end, square at the baseline.
+  function hbar(x, y, w, h, r = 4) {
+    if (w <= 0) return '';
+    r = Math.min(r, w, h / 2);
+    return `M${x},${y}h${(w - r).toFixed(2)}a${r},${r} 0 0 1 ${r},${r}v${h - 2 * r}a${r},${r} 0 0 1 ${-r},${r}h${-(w - r).toFixed(2)}z`;
+  }
+
+  // Interactive mark wrapper: custom tooltip in the app, <title> in the report.
+  function tipAttrs(ctx, text) {
+    return ctx.nativeTips ? '' : ` tabindex="0" data-tip="${esc(text)}"`;
+  }
+  function tipTitle(ctx, text) {
+    return ctx.nativeTips ? `<title>${esc(text)}</title>` : '';
+  }
+  function txt(x, y, s, { size = 12, fill, anchor = 'start', weight = 400, mono = false } = {}) {
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${size}" text-anchor="${anchor}" font-weight="${weight}"${mono ? ' font-family="IBM Plex Mono, ui-monospace, monospace"' : ''} style="fill:${fill}">${esc(s)}</text>`;
+  }
+  function svgWrap(W, H, label, body) {
+    return `<svg class="chart-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}" font-family="Public Sans, system-ui, sans-serif">${body}</svg>`;
+  }
+  function table(head, rows) {
+    return `<table class="chart-table"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c, i) => (i ? `<td>${esc(c)}</td>` : `<th scope="row">${esc(c)}</th>`)).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+
+  // Shared row layout for the horizontal charts. Narrow screens put the name above the bar.
+  function rowLayout(W, n, { valW = 150, rowGap = 36 } = {}) {
+    const narrow = W < 560;
+    const labelW = narrow ? 0 : Math.min(250, Math.round(W * 0.3));
+    const vW = narrow ? 0 : valW;
+    const rowH = narrow ? 50 : rowGap;
+    const top = 6, axisH = 24;
+    const x0 = narrow ? 2 : labelW + 12;
+    const x1 = W - (narrow ? 8 : vW + 12);
+    return { W, narrow, labelW, vW, rowH, top, axisH, x0, x1, H: top + n * rowH + axisH, y: (i) => top + i * rowH, barY: (i) => top + i * rowH + (narrow ? 26 : 11) };
+  }
+  // Row name + value text, placed for wide or narrow layouts.
+  function rowText(L, W, i, name, value, pal) {
+    if (L.narrow) {
+      const valPx = value.length * 6.6;
+      return txt(2, L.y(i) + 15, trunc(name, W - valPx - 16), { size: 13, fill: pal.ink, weight: 600 }) +
+        txt(W - 2, L.y(i) + 15, value, { size: 12, fill: pal.ink2, anchor: 'end', mono: true });
+    }
+    return txt(L.labelW, L.barY(i) + 10, trunc(name, L.labelW), { size: 13, fill: pal.ink, anchor: 'end', weight: 600 }) +
+      txt(W - 2, L.barY(i) + 10, value, { size: 12, fill: pal.ink2, anchor: 'end', mono: true });
+  }
+  function xAxis(L, scale, tickVals, fmt, pal) {
+    const yTop = L.top - 2, yBot = L.H - L.axisH + 2;
+    return tickVals.map((t) => {
+      const x = scale(t);
+      return `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${yTop}" y2="${yBot}" style="stroke:${pal.line}" stroke-width="1"/>` +
+        edgeTxt(x, L.H - 6, fmt(t), L.W, pal);
+    }).join('');
+  }
+
+  // Tick label that never spills past the left or right edge.
+  function edgeTxt(x, y, s, W, pal) {
+    const half = (String(s).length * 6.6) / 2;
+    const anchor = x - half < 0 ? 'start' : x + half > W ? 'end' : 'middle';
+    return txt(anchor === 'start' ? Math.max(x, 0) : anchor === 'end' ? Math.min(x, W) : x, y, s, { size: 11, fill: pal.ink2, anchor, mono: true });
+  }
+
+  // ---------- 1. Budget and spend (bullet) ----------
+  function budgetSpend(ctx) {
+    const { items, C, cur, pal, W } = ctx;
+    const rows = items.filter((it) => isNum(it.m.spend));
+    if (rows.length < 2) return { empty: 'Add amount spent to at least two campaigns to see this.' };
+    const max = Math.max(...rows.map((it) => Math.max(it.m.spend, it.m.budget || 0)));
+    const tv = ticks(max);
+    const L = rowLayout(W, rows.length, { valW: 160 });
+    const sx = (v) => L.x0 + (v / tv[tv.length - 1]) * (L.x1 - L.x0);
+    let body = xAxis(L, sx, tv, (t) => shortMoney(C, cur, t), pal);
+    rows.forEach((it, i) => {
+      const m = it.m, y = L.barY(i), col = pal.s[ctx.slot(it.c.id)];
+      const used = isNum(m.budget) && m.budget > 0 ? m.spend / m.budget : null;
+      const tip = `${it.c.name}\nSpent ${C.fmtMoney(m.spend, cur)}${isNum(m.budget) ? ` of ${C.fmtMoney(m.budget, cur)} budget (${pct0(used)} used)` : ' · no budget entered'}`;
+      body += `<g${tipAttrs(ctx, tip)} class="mark">${tipTitle(ctx, tip)}<rect x="${L.x0}" y="${y - 6}" width="${L.x1 - L.x0}" height="24" fill="transparent"/>` +
+        `<path d="${hbar(L.x0, y, sx(m.spend) - L.x0, 12)}" style="fill:${col}"/>` +
+        (isNum(m.budget) && m.budget > 0 ? `<line x1="${sx(m.budget).toFixed(1)}" x2="${sx(m.budget).toFixed(1)}" y1="${y - 5}" y2="${y + 17}" style="stroke:${pal.ink}" stroke-width="2"/>` : '') + '</g>';
+      body += rowText(L, W, i, it.c.name, isNum(m.budget) ? `${shortMoney(C, cur, m.spend)} of ${shortMoney(C, cur, m.budget)} · ${pct0(used)}` : `${shortMoney(C, cur, m.spend)} · no budget`, pal);
+    });
+    const under = rows.filter((it) => isNum(it.m.budgetUsedPct) && it.m.budgetUsedPct < 0.7);
+    const note = under.length
+      ? `${under.map((it) => it.c.name).join(', ')} spent under 70% of budget. Delivery was limited (audience too small, bid cap, or ads rejected), so its results may be understated.`
+      : 'Every campaign with a budget spent most of it, so spend is a fair basis for comparison.';
+    return {
+      svg: svgWrap(W, L.H, 'Bar chart of amount spent per campaign with budget markers', body),
+      key: [['bar', 'Amount spent'], ['tick', 'Budget']],
+      note,
+      table: table(['Campaign', 'Spent', 'Budget', 'Budget used'], rows.map((it) => [it.c.name, C.fmtMoney(it.m.spend, cur), C.fmtMoney(it.m.budget, cur), C.fmtPct(it.m.budgetUsedPct)])),
+    };
+  }
+
+  // ---------- 2. Share of spend vs share of results (100% stacks) ----------
+  function shareOfResults(ctx) {
+    const { items, C, cur, pal, W } = ctx;
+    const cand = [['spend', 'Spend'], ['leads', 'Leads'], ['qualifiedLeads', 'Qualified leads'], ['conversions', 'Conversions']];
+    const skipped = [];
+    const metrics = cand.filter(([k, label]) => {
+      const vals = items.map((it) => (k === 'spend' ? it.m.spend : it.c[k]));
+      const tot = vals.filter(isNum).reduce((a, b) => a + b, 0);
+      if (!(tot > 0)) return false;
+      if (vals.some((v) => !isNum(v))) { skipped.push(`${label.toLowerCase()} (missing for ${items.filter((it, j) => !isNum(vals[j])).map((it) => it.c.name).join(', ')})`); return false; }
+      return true;
+    });
+    if (metrics.length < 2 || metrics[0][0] !== 'spend') return { empty: 'Needs amount spent and at least one result (leads, qualified leads or conversions) for every campaign.' };
+    const L = rowLayout(W, metrics.length, { valW: 0, rowGap: 40 });
+    L.x1 = W - 4; L.H -= L.axisH - 4;
+    const shares = {};
+    let body = '';
+    metrics.forEach(([k, label], i) => {
+      const vals = items.map((it) => (k === 'spend' ? it.m.spend : it.c[k]));
+      const tot = vals.reduce((a, b) => a + b, 0);
+      shares[k] = {};
+      const y = L.barY(i) - 4, h = 20, span = L.x1 - L.x0;
+      let x = L.x0;
+      body += L.narrow ? txt(2, L.y(i) + 15, label, { size: 13, fill: pal.ink, weight: 600 }) : txt(L.labelW, y + 14, label, { size: 13, fill: pal.ink, anchor: 'end', weight: 600 });
+      items.forEach((it, j) => {
+        const s = vals[j] / tot;
+        shares[k][it.c.id] = s;
+        const w = s * span;
+        const gap = j < items.length - 1 ? 2 : 0;
+        const val = k === 'spend' ? C.fmtMoney(vals[j], cur) : C.fmtInt(vals[j]);
+        const tip = `${it.c.name}\n${label}: ${val} (${pct0(s)} of total)`;
+        if (w > 0.5) {
+          body += `<g${tipAttrs(ctx, tip)} class="mark">${tipTitle(ctx, tip)}<rect x="${x.toFixed(1)}" y="${y}" width="${Math.max(0.5, w - gap).toFixed(1)}" height="${h}" rx="3" style="fill:${pal.s[ctx.slot(it.c.id)]}"/>`;
+          if (w - gap >= 44) {
+            const cx = x + (w - gap) / 2;
+            body += `<rect x="${(cx - 18).toFixed(1)}" y="${y + 3}" width="36" height="14" rx="7" style="fill:${pal.surface}" opacity="0.92"/>` + txt(cx, y + 14, pct0(s), { size: 11, fill: pal.ink, anchor: 'middle', mono: true, weight: 600 });
+          }
+          body += '</g>';
+        }
+        x += w;
+      });
+    });
+    // Efficiency story: compare the best available result row with spend share.
+    const resultKey = metrics[metrics.length - 1][0];
+    const resultLabel = metrics[metrics.length - 1][1].toLowerCase();
+    const eff = items.map((it) => ({ it, s: shares.spend[it.c.id], r: shares[resultKey][it.c.id] })).filter((e) => e.s > 0);
+    eff.sort((a, b) => b.r / b.s - a.r / a.s);
+    const best = eff[0], worst = eff[eff.length - 1];
+    let note = `${best.it.c.name} took ${pct0(best.s)} of the spend and brought ${pct0(best.r)} of the ${resultLabel}.`;
+    if (worst !== best) note += ` ${worst.it.c.name} took ${pct0(worst.s)} of the spend for ${pct0(worst.r)} of the ${resultLabel}.`;
+    note += ' A result share bigger than the spend share means money worked harder there.';
+    if (skipped.length) note += ` Not shown: ${skipped.join('; ')}.`;
+    return {
+      svg: svgWrap(W, L.H, `Stacked bars comparing each campaign's share of spend and of ${resultLabel}`, body),
+      note,
+      table: table(['Campaign', ...metrics.map((m) => m[1] + ' share')], items.map((it) => [it.c.name, ...metrics.map(([k]) => pct0(shares[k][it.c.id]))])),
+    };
+  }
+
+  // ---------- 3. CPL vs cost per qualified lead (dumbbell) ----------
+  function leadQualityCost(ctx) {
+    const { items, C, cur, pal, W } = ctx;
+    const rows = items.filter((it) => isNum(it.m.cpl) && isNum(it.m.cpql));
+    if (rows.length < 2) return { empty: 'Add qualified leads (from your CRM) to at least two lead campaigns to see this.' };
+    const max = Math.max(...rows.map((it) => it.m.cpql));
+    const tv = ticks(max);
+    const L = rowLayout(W, rows.length, { valW: 150 });
+    const sx = (v) => L.x0 + 6 + (v / tv[tv.length - 1]) * (L.x1 - L.x0 - 12);
+    let body = xAxis(L, sx, tv, (t) => shortMoney(C, cur, t), pal);
+    rows.forEach((it, i) => {
+      const m = it.m, cy = L.barY(i) + 6, col = pal.s[ctx.slot(it.c.id)];
+      const a = sx(m.cpl), b = sx(m.cpql);
+      const mult = m.cpql / m.cpl;
+      const tip = `${it.c.name}\nCPL ${C.fmtMoney(m.cpl, cur)} → per qualified lead ${C.fmtMoney(m.cpql, cur)} (${mult.toFixed(1)}×)`;
+      body += `<g${tipAttrs(ctx, tip)} class="mark">${tipTitle(ctx, tip)}<rect x="${L.x0}" y="${cy - 12}" width="${L.x1 - L.x0}" height="24" fill="transparent"/>` +
+        `<line x1="${a.toFixed(1)}" x2="${b.toFixed(1)}" y1="${cy}" y2="${cy}" style="stroke:${col}" stroke-width="2"/>` +
+        `<circle cx="${a.toFixed(1)}" cy="${cy}" r="5" style="fill:${pal.surface};stroke:${col}" stroke-width="2"/>` +
+        `<circle cx="${b.toFixed(1)}" cy="${cy}" r="6" style="fill:${col};stroke:${pal.surface}" stroke-width="2"/></g>`;
+      body += rowText(L, W, i, it.c.name, `${shortMoney(C, cur, m.cpl)} → ${shortMoney(C, cur, m.cpql)} · ${mult.toFixed(1)}×`, pal);
+    });
+    const byCpl = [...rows].sort((p, q) => p.m.cpl - q.m.cpl);
+    const byCpql = [...rows].sort((p, q) => p.m.cpql - q.m.cpql);
+    let note;
+    if (byCpl[0] !== byCpql[0]) {
+      note = `${byCpl[0].c.name} has the cheapest leads (${C.fmtMoney(byCpl[0].m.cpl, cur)}), but ${byCpql[0].c.name} has the cheapest qualified leads (${C.fmtMoney(byCpql[0].m.cpql, cur)} vs ${C.fmtMoney(byCpl[0].m.cpql, cur)}). Judge lead campaigns on the filled dot.`;
+    } else {
+      note = `${byCpl[0].c.name} wins on both: cheapest leads and cheapest qualified leads. The longer the line, the more junk leads a campaign pays for.`;
+    }
+    return {
+      svg: svgWrap(W, L.H, 'Dumbbell chart from cost per lead to cost per qualified lead', body),
+      key: [['hollow', 'Cost per lead'], ['filled', 'Cost per qualified lead']],
+      note,
+      table: table(['Campaign', 'CPL', 'Cost per qualified lead', 'Multiple'], rows.map((it) => [it.c.name, C.fmtMoney(it.m.cpl, cur), C.fmtMoney(it.m.cpql, cur), (it.m.cpql / it.m.cpl).toFixed(1) + '×'])),
+    };
+  }
+
+  // ---------- 4. Cost vs quality map (bubble scatter) ----------
+  function costQualityMap(ctx) {
+    const { r, items, C, cur, pal, W } = ctx;
+    const xKey = r.tiers[0].metrics[0];
+    const haveQ = items.filter((it) => isNum(it.m.qualifiedPct)).length >= 2;
+    const yKey = haveQ ? 'qualifiedPct' : 'ctr';
+    const pts = items.filter((it) => isNum(it.m[xKey]) && isNum(it.m[yKey]));
+    const xLab = C.METRIC_DEFS[xKey].label, yLab = C.METRIC_DEFS[yKey].label;
+    if (pts.length < 2) return { empty: `Needs ${xLab.toLowerCase()} and ${yLab.toLowerCase()} for at least two campaigns.` };
+    const H = W < 560 ? 300 : 340;
+    const m = { l: 52, r: 18, t: 30, b: 44 };
+    const xt = ticks(Math.max(...pts.map((p) => p.m[xKey])) * 1.12);
+    const yt = ticks(Math.max(...pts.map((p) => p.m[yKey])) * 1.15);
+    const sx = (v) => m.l + (v / xt[xt.length - 1]) * (W - m.l - m.r);
+    const sy = (v) => H - m.b - (v / yt[yt.length - 1]) * (H - m.t - m.b);
+    const fx = (v) => (C.METRIC_DEFS[xKey].fmt === 'money' ? shortMoney(C, cur, v) : String(v));
+    let body = '';
+    xt.forEach((t) => { body += `<line x1="${sx(t).toFixed(1)}" x2="${sx(t).toFixed(1)}" y1="${m.t}" y2="${H - m.b}" style="stroke:${pal.line}"/>` + edgeTxt(sx(t), H - m.b + 16, fx(t), W, pal); });
+    yt.forEach((t) => { body += `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(t).toFixed(1)}" y2="${sy(t).toFixed(1)}" style="stroke:${pal.line}"/>` + txt(m.l - 6, sy(t) + 4, shortPct(t), { size: 11, fill: pal.ink2, anchor: 'end', mono: true }); });
+    // Median guides split the plot into four zones.
+    const med = (arr) => { const s = [...arr].sort((a, b) => a - b); const n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+    const mx = med(pts.map((p) => p.m[xKey])), my = med(pts.map((p) => p.m[yKey]));
+    body += `<line x1="${sx(mx).toFixed(1)}" x2="${sx(mx).toFixed(1)}" y1="${m.t}" y2="${H - m.b}" style="stroke:${pal.ink2}" stroke-width="1" opacity="0.45"/>`;
+    body += `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(my).toFixed(1)}" y2="${sy(my).toFixed(1)}" style="stroke:${pal.ink2}" stroke-width="1" opacity="0.45"/>`;
+    body += txt(m.l + 6, m.t + 14, 'Cheaper and better', { size: 11, fill: pal.ink2, weight: 600 });
+    body += txt(W - m.r - 6, H - m.b - 8, 'Costlier and weaker', { size: 11, fill: pal.ink2, anchor: 'end', weight: 600 });
+    body += txt(m.l - 44, 14, `↑ ${yLab.replace(/ \(.*\)$/, '')}: higher is better`, { size: 12, fill: pal.ink2 });
+    body += txt(W - m.r, H - 6, `${xLab.replace(/ \(.*\)$/, '')}: left is cheaper →`, { size: 12, fill: pal.ink2, anchor: 'end' });
+    const maxSpend = Math.max(...pts.map((p) => p.m.spend || 0)) || 1;
+    const placed = pts.map((it) => { const cx = sx(it.m[xKey]), cy = sy(it.m[yKey]), rr = 6 + 10 * Math.sqrt((it.m.spend || 0) / (Math.max(...pts.map((p) => p.m.spend || 0)) || 1)); return { x0: cx - rr, x1: cx + rr, y0: cy - rr, y1: cy + rr }; });
+    placed.push({ x0: m.l, x1: m.l + 120, y0: m.t, y1: m.t + 18 }, { x0: W - m.r - 130, x1: W - m.r, y0: H - m.b - 20, y1: H - m.b });
+    // Draw biggest first so small bubbles stay on top.
+    const order = [...pts].sort((a, b) => (b.m.spend || 0) - (a.m.spend || 0));
+    let labels = '';
+    order.forEach((it) => {
+      const cx = sx(it.m[xKey]), cy = sy(it.m[yKey]);
+      const rad = 6 + 10 * Math.sqrt((it.m.spend || 0) / maxSpend);
+      const col = pal.s[ctx.slot(it.c.id)];
+      const tip = `${it.c.name}\n${xLab}: ${C.formatMetric(xKey, it.m[xKey], cur)}\n${yLab}: ${C.fmtPct(it.m[yKey])}\nSpent: ${C.fmtMoney(it.m.spend, cur)}`;
+      body += `<g${tipAttrs(ctx, tip)} class="mark">${tipTitle(ctx, tip)}<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${Math.max(rad, 12)}" fill="transparent"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${rad.toFixed(1)}" style="fill:${col};stroke:${pal.surface}" stroke-width="2" opacity="0.9"/></g>`;
+      const name = trunc(it.c.name, Math.min(220, (W - m.l - m.r) * 0.55));
+      const tw = name.length * 6.6;
+      const cands = [];
+      for (const off of [0, 15, -15, 30, -30]) {
+        cands.push({ anchor: 'start', x: cx + rad + 6, y: cy + 4 + off });
+        cands.push({ anchor: 'end', x: cx - rad - 6, y: cy + 4 + off });
+      }
+      cands.push({ anchor: 'middle', x: cx, y: cy - rad - 6 }, { anchor: 'middle', x: cx, y: cy + rad + 15 });
+      const boxOf = (c) => {
+        let x0 = c.anchor === 'start' ? c.x : c.anchor === 'end' ? c.x - tw : c.x - tw / 2;
+        if (c.anchor === 'middle') { x0 = Math.min(W - m.r - tw - 2, Math.max(m.l + 2, x0)); c.x = x0 + tw / 2; }
+        return { x0, x1: x0 + tw, y0: c.y - 11, y1: c.y + 3 };
+      };
+      const inside = (b) => b.x0 >= m.l + 2 && b.x1 <= W - m.r && b.y0 >= m.t && b.y1 <= H - m.b - 2;
+      const free = (b) => !placed.some((p) => b.x0 < p.x1 && b.x1 > p.x0 && b.y0 < p.y1 && b.y1 > p.y0);
+      let pick = cands.find((c) => { const b = boxOf(c); return inside(b) && free(b); }) || cands.find((c) => inside(boxOf(c))) || cands[0];
+      const box = boxOf(pick);
+      const lx = pick.x, ly = pick.y, anchorL = pick.anchor;
+      placed.push(box);
+      labels += txt(lx, ly, name, { size: 12, fill: pal.ink, anchor: anchorL, weight: 600 });
+    });
+    body += labels;
+    const good = pts.filter((p) => p.m[xKey] <= mx && p.m[yKey] >= my).map((p) => p.c.name);
+    const bad = pts.filter((p) => p.m[xKey] > mx && p.m[yKey] < my).map((p) => p.c.name);
+    let note = good.length ? `Top-left (cheaper and better than the middle): ${good.join(', ')}.` : 'No campaign is both cheaper and better than the middle of the group.';
+    if (bad.length) note += ` Bottom-right (costlier and weaker): ${bad.join(', ')}.`;
+    if (!haveQ) note += ' Using click-through rate for quality because qualified leads are missing.';
+    note += ' Bubble size shows amount spent.';
+    return {
+      svg: svgWrap(W, H, `Scatter plot of ${xLab} against ${yLab}`, body),
+      note,
+      table: table(['Campaign', xLab, yLab, 'Spent'], pts.map((it) => [it.c.name, C.formatMetric(xKey, it.m[xKey], cur), C.fmtPct(it.m[yKey]), C.fmtMoney(it.m.spend, cur)])),
+    };
+  }
+
+  // ---------- 5. Timeline ----------
+  function timeline(ctx) {
+    const { items, C, cur, pal, W } = ctx;
+    const rows = items.filter((it) => it.c.startDate && it.c.endDate);
+    if (rows.length < 2) return { empty: 'Add start and end dates to at least two campaigns to see this.' };
+    const t0 = Math.min(...rows.map((it) => Date.parse(it.c.startDate)));
+    const t1 = Math.max(...rows.map((it) => Date.parse(it.c.endDate))) + DAY;
+    const spanDays = Math.round((t1 - t0) / DAY);
+    const L = rowLayout(W, rows.length, { valW: 160 });
+    const sx = (t) => L.x0 + ((t - t0) / (t1 - t0)) * (L.x1 - L.x0);
+    const stepDays = [1, 2, 7, 14, 30, 61, 91].find((s) => spanDays / s <= (L.narrow ? 4 : 6)) || 182;
+    const tv = [];
+    for (let t = t0; t <= t1; t += stepDays * DAY) tv.push(t);
+    let body = xAxis(L, sx, tv, (t) => fmtDate(new Date(t).toISOString().slice(0, 10)), pal);
+    rows.forEach((it, i) => {
+      const a = sx(Date.parse(it.c.startDate)), b = sx(Date.parse(it.c.endDate) + DAY), y = L.barY(i);
+      const days = it.m.days;
+      const tip = `${it.c.name}\n${fmtDate(it.c.startDate)} – ${fmtDate(it.c.endDate)} · ${days} days\n${C.fmtMoney(it.m.dailySpend, cur)} a day`;
+      body += `<g${tipAttrs(ctx, tip)} class="mark">${tipTitle(ctx, tip)}<rect x="${L.x0}" y="${y - 6}" width="${L.x1 - L.x0}" height="24" fill="transparent"/><rect x="${a.toFixed(1)}" y="${y}" width="${Math.max(3, b - a - 1).toFixed(1)}" height="12" rx="4" style="fill:${pal.s[ctx.slot(it.c.id)]}"/></g>`;
+      body += rowText(L, W, i, it.c.name, `${days} days · ${shortMoney(C, cur, it.m.dailySpend || 0)}/day`, pal);
+    });
+    // Longest overlap between two campaigns on the same platform.
+    let ov = null;
+    for (let i = 0; i < rows.length; i++) for (let j = i + 1; j < rows.length; j++) {
+      const p = rows[i], q = rows[j];
+      const d = Math.round((Math.min(Date.parse(p.c.endDate), Date.parse(q.c.endDate)) + DAY - Math.max(Date.parse(p.c.startDate), Date.parse(q.c.startDate))) / DAY);
+      if (d > 0 && (p.c.platform || '') === (q.c.platform || '') && (!ov || d > ov.d)) ov = { p, q, d };
+    }
+    const short = rows.filter((it) => it.m.days < 7).map((it) => it.c.name);
+    let note = ov ? `${ov.p.c.name} and ${ov.q.c.name} ran together for ${ov.d} days on ${ov.p.c.platform || 'the same platform'}. If their audiences overlap they bid against each other and push costs up.` : 'No two campaigns on the same platform ran at the same time.';
+    if (short.length) note += ` ${short.join(', ')} ran under a week, so ${short.length === 1 ? 'it was' : 'they were'} probably still in the learning phase.`;
+    const missing = items.filter((it) => !(it.c.startDate && it.c.endDate)).map((it) => it.c.name);
+    if (missing.length) note += ` No dates for ${missing.join(', ')}.`;
+    return {
+      svg: svgWrap(W, L.H, 'Timeline of when each campaign ran', body),
+      note,
+      table: table(['Campaign', 'Start', 'End', 'Days', 'Daily spend'], rows.map((it) => [it.c.name, it.c.startDate, it.c.endDate, String(it.m.days), C.fmtMoney(it.m.dailySpend, cur)])),
+    };
+  }
+
+  // ---------- 6. Day by day (needs daily data from a Meta sync) ----------
+  const TREND_METRICS = {
+    cpl: { label: 'Cost per lead', money: true, num: (w) => w.spend, den: (w) => w.leads },
+    cpc: { label: 'Cost per click', money: true, num: (w) => w.spend, den: (w) => w.clicks },
+    cpm: { label: 'Cost per 1,000 impressions', money: true, num: (w) => w.spend * 1000, den: (w) => w.impressions },
+    cpa: { label: 'Cost per conversion', money: true, num: (w) => w.spend, den: (w) => w.conversions },
+    ctr: { label: 'Click-through rate', pct: true, num: (w) => w.clicks, den: (w) => w.impressions },
+    spend: { label: 'Spend per day', money: true, num: (w) => w.spend, den: (w) => w.days },
+    leads: { label: 'Leads per day', num: (w) => w.leads, den: (w) => w.days },
+  };
+  const DEFAULT_TREND = { leads: 'cpl', traffic: 'cpc', engagement: 'cpc', video_views: 'cpm', awareness: 'cpm', conversions: 'cpa' };
+
+  /** 7-day rolling value of a metric for each date (sums first, then divide). */
+  function rolling(daily, dates, metric, win = 7) {
+    const byDate = new Map(daily.map((d) => [d.date, d]));
+    const def = TREND_METRICS[metric];
+    return dates.map((date, i) => {
+      const w = { spend: 0, impressions: 0, clicks: 0, leads: 0, conversions: 0, days: 0 };
+      let have = 0;
+      for (let j = Math.max(0, i - win + 1); j <= i; j++) {
+        const d = byDate.get(dates[j]);
+        w.days++;
+        if (!d) continue;
+        have++;
+        w.spend += d.spend || 0; w.impressions += d.impressions || 0; w.clicks += d.clicks || 0;
+        w.leads += d.leads || 0; w.conversions += d.conversions || 0;
+      }
+      if (!byDate.has(date) || have < Math.min(3, i + 1)) return null;
+      const den = def.den(w);
+      return den > 0 ? def.num(w) / den : null;
+    });
+  }
+
+  function trendChart(ctx) {
+    const { r, items, C, cur, pal, W } = ctx;
+    const withDaily = items.filter((it) => Array.isArray(it.c.daily) && it.c.daily.length >= 3);
+    if (withDaily.length < 2) return { empty: 'Day-by-day lines need data synced from Meta. Imported files only have totals.' };
+    const available = Object.keys(TREND_METRICS).filter((k) => {
+      if (k === 'cpl' || k === 'leads') return withDaily.some((it) => it.c.daily.some((d) => d.leads > 0));
+      if (k === 'cpa') return withDaily.some((it) => it.c.daily.some((d) => d.conversions > 0));
+      return true;
+    });
+    let metric = ctx.trendMetric && available.includes(ctx.trendMetric) ? ctx.trendMetric : DEFAULT_TREND[r.objective];
+    if (!available.includes(metric)) metric = available[0];
+    const def = TREND_METRICS[metric];
+    const allDates = [...new Set(withDaily.flatMap((it) => it.c.daily.map((d) => d.date)))].sort();
+    const series = withDaily.map((it) => ({ it, vals: rolling(it.c.daily, allDates, metric) }));
+    const maxV = Math.max(0, ...series.flatMap((s) => s.vals.filter(isNum)));
+    if (!(maxV > 0)) return { empty: `No ${def.label.toLowerCase()} in this period.`, metric, metrics: available };
+    const narrow = W < 560;
+    const H = narrow ? 260 : 300;
+    const m = { l: 52, r: narrow ? 12 : 150, t: 12, b: 30 };
+    const yt = ticks(maxV * 1.1);
+    const n = allDates.length;
+    const sx = (i) => m.l + (n === 1 ? 0 : (i / (n - 1)) * (W - m.l - m.r));
+    const sy = (v) => H - m.b - (v / yt[yt.length - 1]) * (H - m.t - m.b);
+    const fmt = (v) => (def.money ? shortMoney(C, cur, v) : def.pct ? shortPct(v) : (v < 10 ? v.toFixed(1) : String(Math.round(v))));
+    const fmtLong = (v) => (!isNum(v) ? '—' : def.money ? C.fmtMoney(v, cur) : def.pct ? C.fmtPct(v) : v.toFixed(1));
+    let body = '';
+    yt.forEach((t) => { body += `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(t).toFixed(1)}" y2="${sy(t).toFixed(1)}" style="stroke:${pal.line}"/>` + txt(m.l - 6, sy(t) + 4, fmt(t), { size: 11, fill: pal.ink2, anchor: 'end', mono: true }); });
+    const step = Math.max(1, Math.ceil(n / (narrow ? 4 : 7)));
+    for (let i = 0; i < n; i += step) body += edgeTxt(sx(i), H - 8, fmtDate(allDates[i]), W - m.r + 20, pal);
+    // Lines, broken where there is no value.
+    for (const s of series) {
+      const col = pal.s[ctx.slot(s.it.c.id)];
+      let d = '', pen = false;
+      s.vals.forEach((v, i) => {
+        if (!isNum(v)) { pen = false; return; }
+        d += `${pen ? 'L' : 'M'}${sx(i).toFixed(1)},${sy(v).toFixed(1)}`;
+        pen = true;
+      });
+      body += `<path d="${d}" fill="none" style="stroke:${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    }
+    // Direct labels at each line's last value (wide screens), nudged apart.
+    if (!narrow) {
+      const ends = series.map((s) => {
+        let i = s.vals.length - 1; while (i >= 0 && !isNum(s.vals[i])) i--;
+        return i < 0 ? null : { s, i, y: sy(s.vals[i]) };
+      }).filter(Boolean).sort((a, b) => a.y - b.y);
+      for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 14) ends[k].y = ends[k - 1].y + 14;
+      for (const e of ends) {
+        body += `<circle cx="${sx(e.i).toFixed(1)}" cy="${sy(e.s.vals[e.i]).toFixed(1)}" r="3.5" style="fill:${pal.s[ctx.slot(e.s.it.c.id)]};stroke:${pal.surface}" stroke-width="2"/>`;
+        body += txt(W - m.r + 8, e.y + 4, trunc(e.s.it.c.name, m.r - 12), { size: 12, fill: pal.ink, weight: 600 });
+      }
+    }
+    // Hover columns: a crosshair and one tooltip listing every line at that date.
+    const colW = n > 1 ? (W - m.l - m.r) / (n - 1) : W - m.l - m.r;
+    allDates.forEach((date, i) => {
+      const lines = series.map((s) => `${s.it.c.name}: ${fmtLong(s.vals[i])}`).join('\n');
+      const tip = `${fmtDate(date)} · ${def.label} (7-day)\n${lines}`;
+      const x = sx(i);
+      body += `<g class="mark col"${ctx.nativeTips ? '' : ` data-tip="${esc(tip)}"`}>${tipTitle(ctx, tip)}<rect x="${(x - colW / 2).toFixed(1)}" y="${m.t}" width="${Math.max(2, colW).toFixed(1)}" height="${H - m.t - m.b}" fill="transparent"/><line class="xhair" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${m.t}" y2="${H - m.b}" style="stroke:${pal.ink2}" stroke-width="1" opacity="0"/></g>`;
+    });
+    // Story: compare the first and last full week.
+    const changes = series.map((s) => {
+      const vals = s.vals.map((v, i) => [v, i]).filter(([v]) => isNum(v));
+      if (vals.length < 10) return null;
+      const first = vals[Math.min(6, vals.length - 1)][0], last = vals[vals.length - 1][0];
+      return { s, first, last, pct: first > 0 ? last / first - 1 : null };
+    }).filter((x) => x && isNum(x.pct));
+    const lowerBetter = def.money && metric !== 'spend';
+    let note = `Lines are 7-day rolling ${def.label.toLowerCase()}, so single-day spikes are smoothed out.`;
+    if (changes.length) {
+      const worst = [...changes].sort((a, b) => (lowerBetter ? b.pct - a.pct : a.pct - b.pct))[0];
+      const dir = worst.pct > 0 ? 'rose' : 'fell';
+      const bad = lowerBetter ? worst.pct > 0.15 : worst.pct < -0.15;
+      note = `${worst.s.it.c.name}: ${def.label.toLowerCase()} ${dir} ${Math.abs(Math.round(worst.pct * 100))}% from its first week (${fmtLong(worst.first)}) to its latest (${fmtLong(worst.last)}).` +
+        (bad ? (lowerBetter ? ' Rising costs over time often mean the audience is tiring of the ads: refresh the creative or widen the audience.' : ' A falling rate over time often means creative fatigue.') : '') + ' ' + note;
+    }
+    return {
+      svg: svgWrap(W, H, `Line chart of ${def.label} by day`, body),
+      metric, metrics: available,
+      note,
+      table: table(['Campaign', `${def.label}: first week`, 'Latest week', 'Change'], changes.map((c) => [c.s.it.c.name, fmtLong(c.first), fmtLong(c.last), (c.pct > 0 ? '+' : '') + Math.round(c.pct * 100) + '%'])),
+    };
+  }
+
+  const CHARTS = [
+    { id: 'budget', step: 'Step 1 · Cost and budget', title: 'Budget and spend', sub: 'How much went into each campaign, and how much of the plan was used.', fn: budgetSpend },
+    { id: 'share', step: 'Step 1 · Cost and budget', title: 'Share of spend vs share of results', sub: 'Who took the money, and who delivered.', fn: shareOfResults },
+    { id: 'quality', step: 'Step 2 · Audience and lead quality', title: 'Cheap leads vs cheap good leads', sub: 'From cost per lead to cost per qualified lead.', fn: leadQualityCost, leadsOnly: true },
+    { id: 'map', step: 'Step 2 · Audience and lead quality', title: 'Cost vs quality map', sub: 'The top-left corner is where you want to be.', fn: costQualityMap },
+    { id: 'time', step: 'Step 3 · Duration', title: 'When they ran', sub: 'Length of each run, overlaps and daily spend.', fn: timeline },
+    { id: 'trend', step: 'Step 3 · Duration', title: 'Day by day', sub: 'How each one moved over the period. Spot fatigue and rising costs early.', fn: trendChart, dailyOnly: true },
+  ];
+
+  /**
+   * Build every chart for a comparison result.
+   * opts: { C, cur, width, slot(id) -> 1..5, print: bool }
+   */
+  function buildCharts(r, opts) {
+    const ctx = { r, items: r.items, C: opts.C, cur: opts.cur, W: Math.round(opts.width), slot: opts.slot, pal: opts.print ? PAL_PRINT : PAL_APP, nativeTips: !!opts.print, trendMetric: opts.trendMetric };
+    const hasDaily = r.items.some((it) => Array.isArray(it.c.daily) && it.c.daily.length);
+    return CHARTS.filter((c) => (!c.leadsOnly || r.objective === 'leads') && (!c.dailyOnly || hasDaily)).map((c) => {
+      let out;
+      try { out = c.fn(ctx); } catch (e) { out = { empty: 'This chart could not be drawn from the current data.' }; }
+      return { ...c, ...out };
+    });
+  }
+
+  // Small inline key swatches for charts with more than one mark type.
+  function keyHtml(key, pal) {
+    if (!key) return '';
+    const sw = {
+      bar: `<svg width="18" height="10" aria-hidden="true"><rect width="18" height="10" rx="2" style="fill:${pal.ink2}"/></svg>`,
+      tick: `<svg width="6" height="14" aria-hidden="true"><rect x="2" width="2" height="14" style="fill:${pal.ink}"/></svg>`,
+      hollow: `<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" style="fill:none;stroke:${pal.ink2}" stroke-width="2"/></svg>`,
+      filled: `<svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5.5" style="fill:${pal.ink2}"/></svg>`,
+    };
+    return `<span class="chart-key">${key.map(([k, l]) => `<span>${sw[k]} ${esc(l)}</span>`).join('')}</span>`;
+  }
+
+  const api = { buildCharts, keyHtml, PAL_APP, PAL_PRINT, ticks, shortMoney, CHARTS, TREND_METRICS, rolling };
+  root.CampaignCharts = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Example data for a fictional business ("Lakeside Yoga Studio"). Not real campaigns. */
+(function (root) {
+  const SAMPLE_CSV = [
+    'Campaign name,Platform,Objective,Reporting starts,Reporting ends,Budget,Amount spent (INR),Impressions,Reach,Link clicks,Landing page views,Leads,Qualified leads,Audience size,Targeting',
+    'Example – Open audience lead form,Meta,Leads,2026-08-01,2026-08-21,60000,58200,512000,201000,6140,,412,78,24000000,Advantage+ audience; Mumbai 25-45',
+    'Example – Wellness interests,Meta,Leads,2026-08-01,2026-08-21,60000,59100,318000,142000,4370,3010,264,121,3800000,Interests: yoga + meditation + fitness',
+    'Example – Lookalike of members,Meta,Leads,2026-08-05,2026-08-25,40000,31800,151000,48500,2390,1820,151,96,520000,1% lookalike of members list',
+    'Example – Studio launch reel,Meta,Awareness,2026-08-01,2026-08-10,15000,14900,690000,262000,1880,,,,9500000,Mumbai 22-50 broad interests',
+  ].join('\n');
+  root.SAMPLE_CSV = SAMPLE_CSV;
+  if (typeof module !== 'undefined' && module.exports) module.exports = { SAMPLE_CSV };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Campaign Analyser — browser UI. Depends on core.js (CampaignCore), sample.js (SAMPLE_CSV) and SheetJS (XLSX). */
+(function () {
+  'use strict';
+  const C = window.CampaignCore;
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const MAX_COMPARE = 5;
+  const STORE_KEY = 'campaign-analyser-v1';
+
+  const state = {
+    campaigns: [],
+    selected: new Set(),
+    settings: { ...C.DEFAULT_SETTINGS },
+    isExample: false,
+    warnings: [],
+    tab: 'campaigns',
+    editingId: null,
+    server: null,          // set when the Node server answers /api/health
+    source: 'files',       // 'files' (imported) or 'meta' (synced)
+    wantSource: 'files',
+    fileStash: null,       // imported campaigns kept aside while looking at Meta data
+    meta: { me: null, accounts: [], accountId: null, level: 'campaign', preset: 'last30', since: null, until: null, items: null, selectedIds: [], comparisons: [], loading: false, error: null, range: null, pendingSelection: null },
+    viewer: null,          // a shared, read-only snapshot
+    trendMetric: null,
+  };
+
+  // ---------- Storage (per-browser convenience only) ----------
+  function save() {
+    if (state.viewer) return;
+    try {
+      const files = state.source === 'files' ? { campaigns: state.campaigns, selected: [...state.selected], isExample: state.isExample } : state.fileStash;
+      const m = state.meta;
+      const metaPrefs = { accountId: m.accountId, level: m.level, preset: m.preset, since: m.since, until: m.until, selected: state.source === 'meta' ? [...state.selected] : m.selectedIds };
+      localStorage.setItem(STORE_KEY, JSON.stringify({ files, settings: state.settings, tab: state.tab, source: state.source, metaPrefs }));
+    } catch (e) { /* storage unavailable: fine */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      const files = d.files || { campaigns: d.campaigns, selected: d.selected, isExample: d.isExample };
+      state.campaigns = (files.campaigns || []).map(C.normaliseCampaign);
+      state.selected = new Set((files.selected || []).filter((id) => state.campaigns.some((c) => c.id === id)));
+      state.settings = { ...C.DEFAULT_SETTINGS, ...(d.settings || {}) };
+      state.isExample = !!files.isExample;
+      state.tab = d.tab || 'campaigns';
+      state.wantSource = d.source || 'files';
+      if (d.metaPrefs) {
+        const p = d.metaPrefs;
+        Object.assign(state.meta, { accountId: p.accountId || null, level: p.level || 'campaign', preset: p.preset || 'last30', since: p.since || null, until: p.until || null, selectedIds: p.selected || [], pendingSelection: (p.selected || []).length ? p.selected : null });
+      }
+      return state.campaigns.length > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ---------- Import ----------
+  // Small CSV reader (quotes, commas, newlines) so CSV works even if the spreadsheet library fails to load.
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], cell = '', q = false;
+    const delim = text.split('\n')[0].includes('\t') && !text.split('\n')[0].includes(',') ? '\t' : ',';
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (ch === '"') q = false;
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === delim) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += ch;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
+  }
+
+  function rowsFromWorkbook(data, isText) {
+    if (typeof XLSX === 'undefined') {
+      if (isText) return parseCsv(String(data).replace(/^\ufeff/, ''));
+      throw new Error('the Excel reader did not load; export as CSV instead');
+    }
+    const wb = isText ? XLSX.read(data, { type: 'string', raw: false }) : XLSX.read(data, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+  }
+
+  function importRows(rows, sourceLabel) {
+    const res = C.rowsToCampaigns(rows);
+    if (!res.campaigns.length) {
+      state.warnings = [`${sourceLabel}: no campaigns found. Check that the first row holds column names.`];
+      render();
+      return;
+    }
+    if (state.isExample) { state.campaigns = []; state.selected.clear(); state.isExample = false; }
+    if (res.currency) state.settings.currency = res.currency;
+    state.campaigns.push(...res.campaigns);
+    res.campaigns.slice(0, MAX_COMPARE - state.selected.size).forEach((c) => state.selected.add(c.id));
+    const mapped = Object.keys(res.mapping).filter((k) => !['resultIndicator', 'results'].includes(k));
+    state.warnings = [`${sourceLabel}: added ${res.campaigns.length} campaign${res.campaigns.length === 1 ? '' : 's'}. Recognised columns: ${mapped.map(fieldLabel).join(', ') || 'none'}.`, ...res.warnings];
+    save();
+    render();
+  }
+
+  async function handleFiles(files) {
+    for (const f of files) {
+      try {
+        const isText = /\.(csv|tsv|txt)$/i.test(f.name);
+        const data = isText ? await f.text() : new Uint8Array(await f.arrayBuffer());
+        importRows(rowsFromWorkbook(data, isText), f.name);
+      } catch (e) {
+        state.warnings = [`${f.name}: could not be read (${e.message}). Export it again from Ads Manager as CSV or XLSX.`];
+        render();
+      }
+    }
+  }
+
+  function loadExample() {
+    state.campaigns = [];
+    state.selected.clear();
+    const rows = rowsFromWorkbook(window.SAMPLE_CSV, true);
+    const res = C.rowsToCampaigns(rows);
+    state.campaigns = res.campaigns;
+    res.campaigns.filter((c) => c.objective === 'leads').forEach((c) => state.selected.add(c.id));
+    state.isExample = true;
+    state.warnings = [];
+    state.settings.currency = 'INR';
+    save();
+  }
+
+  // ---------- Helpers ----------
+  function fieldLabel(k) {
+    return (C.FIELDS.find((f) => f.key === k) || {}).label || k;
+  }
+  const money = (v) => C.fmtMoney(v, state.settings.currency);
+  const objLabel = (o) => (C.OBJECTIVES[o] ? C.OBJECTIVES[o].label : 'Not set');
+  const tLabel = (t) => C.TARGETING[t] || t;
+  function selectedCampaigns() {
+    return state.campaigns.filter((c) => state.selected.has(c.id));
+  }
+  function colorSlot(id) {
+    const idx = selectedCampaigns().findIndex((c) => c.id === id);
+    return idx === -1 ? 0 : idx + 1;
+  }
+
+  function funnelChips(c) {
+    const aim = C.targetLevels(c), data = C.dataLevels(c);
+    return '<span class="lv-row" aria-label="Funnel levels">' + [1, 2, 3, 4, 5].map((l) => {
+      const cls = aim.includes(l) ? 'lv aim' : data.includes(l) ? 'lv data' : 'lv';
+      const t = aim.includes(l) ? 'aimed at' : data.includes(l) ? 'has data' : 'no data';
+      return `<span class="${cls}" title="Level ${l}: ${t}">L${l}</span>`;
+    }).join('') + '</span>';
+  }
+
+  // ---------- Render: tabs ----------
+  function render() {
+    renderSource();
+    $$('.tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
+    $$('.panel').forEach((p) => (p.hidden = p.id !== 'panel-' + state.tab));
+    $('#compare-count').textContent = state.selected.size ? String(state.selected.size) : '';
+    renderCampaigns();
+    if (state.tab === 'compare') renderCompare();
+  }
+
+  // For synced items only the fields Meta can't supply can be filled in.
+  function gapsFor(c) {
+    const miss = C.missingInputs(c);
+    if (c.source !== 'meta') return miss;
+    // Meta sets budgets on campaigns or ad sets, never on single ads.
+    return miss.filter((k) => META_EDITABLE.has(k) && !(k === 'budget' && c.level === 'ad'));
+  }
+
+  function renderCampaigns() {
+    const host = $('#campaign-list');
+    $('#example-banner').hidden = !state.isExample;
+    $('#import-notes').innerHTML = state.warnings.map((w) => `<li>${esc(w)}</li>`).join('');
+    $('#import-notes').hidden = !state.warnings.length;
+
+    if (state.source === 'meta') {
+      if (!state.meta.me || !state.meta.accounts.length) { host.innerHTML = ''; return; }
+      const acct = currentAccount();
+      if (!state.campaigns.length) {
+        const msg = !acct || !acct.lastSyncedAt
+          ? (acct && (acct.syncState === 'running' || acct.syncState === 'partial') ? '<p class="empty-title">First sync in progress</p><p>Fetching the last 90 days from Meta. This takes a minute for most accounts.</p>' : '<p class="empty-title">This account hasn\'t been synced yet</p><p>Sync it to pull campaigns, ad sets, ads and daily results from Meta.</p><button class="btn" data-act="sync">Sync this account</button>')
+          : `<p class="empty-title">Nothing ran in this period</p><p>No ${LEVEL_LABELS[state.meta.level].toLowerCase()} spent money between ${fmtDay(presetRange(state.meta.preset, state.meta.since, state.meta.until).since)} and ${fmtDay(presetRange(state.meta.preset, state.meta.since, state.meta.until).until)}. Try a longer date range.</p>`;
+        host.innerHTML = `<div class="empty">${msg}</div>`;
+        return;
+      }
+    }
+    if (!state.campaigns.length) {
+      host.innerHTML = `<div class="empty"><p class="empty-title">No campaigns yet</p><p>Upload an export from Meta Ads Manager or Google Ads, add a campaign by hand, or load the example data to see how it works.</p></div>`;
+      return;
+    }
+    const rows = state.campaigns.map((c) => {
+      const m = C.computeMetrics(c);
+      const t = C.classifyTargeting(c, state.settings);
+      const miss = gapsFor(c);
+      const checked = state.selected.has(c.id);
+      const disabled = !checked && state.selected.size >= MAX_COMPARE;
+      const parent = c.level === 'adset' ? `in ${c.campaignName || 'campaign'}` : c.level === 'ad' ? `${c.adsetName || ''}${c.campaignName ? ' · ' + c.campaignName : ''}` : '';
+      const status = c.status ? `<span class="status-chip ${c.status === 'ACTIVE' ? 'on' : ''}">${c.status === 'ACTIVE' ? 'Active' : esc(String(c.status).toLowerCase().replace(/_/g, ' '))}</span>` : '';
+      const thumb = c.thumbnailUrl ? `<img class="thumb" src="${esc(c.thumbnailUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '';
+      return `<tr>
+        <td class="sel"><input type="checkbox" id="sel-${esc(c.id)}" data-select="${esc(c.id)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} aria-label="Compare ${esc(c.name)}"></td>
+        <th scope="row" class="cname"><div class="cn-row">${thumb}<div><span class="dot s${checked ? colorSlot(c.id) : 0}" aria-hidden="true"></span>${esc(c.name)}${status}<span class="sub">${parent ? esc(parent) + ' · ' : ''}${esc(c.platform || 'Other')} · ${esc(objLabel(c.objective))}${m.days ? ' · ' + m.days + ' days' : ''}</span></div></div></th>
+        <td><span class="chip t-${t.type}" title="${esc(t.reason)}">${esc(tLabel(t.type))}</span></td>
+        <td>${funnelChips(c)}</td>
+        <td class="num">${money(m.spend)}</td>
+        <td class="num">${C.fmtInt(m.leads)}</td>
+        <td class="num">${money(m.cpl)}</td>
+        <td class="num">${C.fmtPct(m.qualifiedPct)}</td>
+        <td class="act">${miss.length ? `<button class="btn small warn" data-edit="${esc(c.id)}">Fill ${miss.length} gap${miss.length === 1 ? '' : 's'}</button>` : `<button class="btn small ghost" data-edit="${esc(c.id)}">Edit</button>`}</td>
+      </tr>`;
+    }).join('');
+    host.innerHTML = `<div class="table-wrap"><table class="ctable">
+      <thead><tr><th class="sel"><span class="sr">Compare</span></th><th>Campaign</th><th>Targeting</th><th>Funnel</th><th class="num">Spend</th><th class="num">Leads</th><th class="num">CPL</th><th class="num">Qualified</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <p class="hint">${state.source === 'meta' && state.meta.range ? `Showing ${LEVEL_LABELS[state.meta.level].toLowerCase()} that spent between ${fmtDay(state.meta.range.since)} and ${fmtDay(state.meta.range.until)}, biggest first. ` : ''}Tick up to ${MAX_COMPARE}, then open <b>Compare</b>. Funnel chips: <span class="lv aim">L4</span> aimed at, <span class="lv data">L3</span> has data only.</p>`;
+  }
+
+  // ---------- Editor ----------
+  const GROUPS = [
+    { title: 'Basics', keys: ['name', 'platform', 'objective'] },
+    { title: 'Budget and dates', keys: ['budget', 'spend', 'startDate', 'endDate'] },
+    { title: 'Awareness · L1–L2', keys: ['impressions', 'reach', 'frequency'] },
+    { title: 'Engagement · L3', keys: ['clicks', 'views'] },
+    { title: 'Leads · L4', keys: ['landingPageViews', 'leads', 'qualifiedLeads'] },
+    { title: 'Conversions · L5', keys: ['conversions', 'conversionValue'] },
+    { title: 'Audience', keys: ['universe', 'targeting', 'targetingNotes'] },
+  ];
+  const HELP = {
+    universe: 'Estimated audience size shown in Ads Manager when you set up targeting.',
+    qualifiedLeads: 'From your CRM: leads your team judged worth following up.',
+    budget: 'The budget you planned for the whole run.',
+    targeting: 'Leave on Auto to classify from universe size and notes.',
+    targetingNotes: 'e.g. "Advantage+", "Interests: yoga", "1% lookalike".',
+    frequency: 'Leave blank to calculate it from impressions ÷ reach.',
+  };
+
+  function openEditor(id) {
+    const isNew = !id;
+    const c = isNew ? C.normaliseCampaign({ name: '', objective: 'leads', platform: 'Meta' }) : state.campaigns.find((x) => x.id === id);
+    if (!c) return;
+    state.editingId = c.id;
+    const miss = new Set(gapsFor(c));
+    const fromMeta = c.source === 'meta';
+    const field = (k) => {
+      const f = C.FIELDS.find((x) => x.key === k);
+      const v = c[k] ?? '';
+      const flag = miss.has(k) ? ' missing' : '';
+      const help = HELP[k] ? `<span class="help">${esc(HELP[k])}</span>` : '';
+      let input;
+      if (f.type === 'select') {
+        const opts = f.options.map((o) => {
+          const lab = k === 'objective' ? objLabel(o) : k === 'targeting' ? (o === 'auto' ? 'Auto' : tLabel(o)) : o;
+          return `<option value="${o}" ${String(v) === o ? 'selected' : ''}>${esc(lab)}</option>`;
+        });
+        if (k === 'objective') opts.unshift(`<option value="" ${!v ? 'selected' : ''}>Not set</option>`);
+        input = `<select id="f-${k}" name="${k}" ${fromMeta && !META_EDITABLE.has(k) ? 'disabled' : ''}>${opts.join('')}</select>`;
+      } else {
+        const type = f.type === 'date' ? 'date' : f.type === 'text' ? 'text' : 'number';
+        const step = f.type === 'num' ? '0.01' : f.type === 'money' ? '0.01' : '1';
+        input = `<input id="f-${k}" name="${k}" type="${type}" ${type === 'number' ? `min="0" step="${step}" inputmode="decimal"` : ''} value="${esc(v)}" ${k === 'name' ? 'required' : ''} ${fromMeta && !META_EDITABLE.has(k) ? 'disabled' : ''}>`;
+      }
+      if (fromMeta && !META_EDITABLE.has(k)) return `<label class="field" for="f-${k}"><span class="flabel">${esc(f.label)} <span class="muted">· from Meta</span></span>${input}</label>`;
+      return `<label class="field${flag}" for="f-${k}"><span class="flabel">${esc(f.label)}${miss.has(k) ? '<span class="need">needed</span>' : ''}</span>${input}${help}</label>`;
+    };
+    const lvAim = C.targetLevels(c);
+    $('#editor-body').innerHTML = `
+      ${fromMeta ? '<p class="note">Numbers from Meta are locked and refresh on every sync. Fill in what Meta can\'t know (qualified leads from your CRM) or correct the audience size, budget and targeting. Your entries are kept across syncs.</p>' : ''}
+      ${miss.size ? `<p class="note">Fields marked <span class="need">needed</span> are blank or zero. Fill what you know; the analysis skips what stays empty.</p>` : ''}
+      ${GROUPS.map((g) => `<fieldset><legend>${g.title}</legend><div class="fgrid">${g.keys.map(field).join('')}</div></fieldset>`).join('')}
+      <fieldset><legend>Funnel levels this campaign aims at</legend>
+        <p class="help">Set by the objective. Tick levels to override, e.g. a lead campaign that also aims for awareness.</p>
+        <div class="lv-picks">${C.FUNNEL_LEVELS.map((l) => `<label class="lv-pick"><input type="checkbox" name="levels" value="${l.level}" ${lvAim.includes(l.level) ? 'checked' : ''}> L${l.level} · ${esc(l.stage)}: ${esc(l.name)}</label>`).join('')}</div>
+      </fieldset>`;
+    $('#editor-title').textContent = isNew ? 'Add a campaign' : `Edit: ${c.name}`;
+    $('#editor-delete').hidden = isNew || fromMeta;
+    $('#editor').dataset.isNew = isNew ? '1' : '';
+    $('#editor')._draft = c;
+    $('#editor').showModal();
+  }
+
+  async function saveMetaEditor(dlg) {
+    const c = dlg._draft;
+    const auto = c.autoValues || {};
+    const body = {};
+    for (const k of META_EDITABLE) {
+      const el = $('#f-' + k);
+      if (!el) continue;
+      const raw = el.value.trim();
+      const f = C.FIELDS.find((x) => x.key === k);
+      let v = raw === '' ? null : ['int', 'num', 'money'].includes(f.type) ? Number(raw) : raw;
+      // Unchanged from what Meta reported: store no override.
+      if (v !== null && auto[k] !== undefined && String(v) === String(auto[k])) v = null;
+      if (k === 'targeting' && v === 'auto') v = null;
+      body[k] = v;
+    }
+    const picked = $$('input[name="levels"]:checked', dlg).map((x) => Number(x.value));
+    const objDefault = c.objective && C.OBJECTIVES[c.objective] ? C.OBJECTIVES[c.objective].levels : [];
+    body.levels = picked.length && picked.join() !== objDefault.join() ? picked : null;
+    try {
+      await api('PUT', `/api/entities/${encodeURIComponent(c.id)}/manual`, body);
+      dlg.close();
+      await loadEntities();
+    } catch (err) {
+      $('#editor-body').insertAdjacentHTML('afterbegin', `<p class="notices" role="alert" style="padding-left:14px">${esc(err.message)}</p>`);
+    }
+  }
+
+  function saveEditor(e) {
+    e.preventDefault();
+    const dlg = $('#editor');
+    if (dlg._draft && dlg._draft.source === 'meta') return saveMetaEditor(dlg);
+    const c = { ...dlg._draft };
+    for (const f of C.FIELDS) {
+      const el = $('#f-' + f.key);
+      if (!el) continue;
+      const raw = el.value.trim();
+      if (['int', 'num', 'money'].includes(f.type)) c[f.key] = raw === '' ? undefined : Number(raw);
+      else c[f.key] = raw === '' ? undefined : raw;
+    }
+    if (!c.name) c.name = 'Untitled campaign';
+    const picked = $$('input[name="levels"]:checked', dlg).map((x) => Number(x.value));
+    const objDefault = c.objective && C.OBJECTIVES[c.objective] ? C.OBJECTIVES[c.objective].levels : [];
+    c.levels = picked.length && picked.join() !== objDefault.join() ? picked : undefined;
+    if (dlg.dataset.isNew) {
+      if (state.isExample) { state.campaigns = []; state.selected.clear(); state.isExample = false; }
+      state.campaigns.push(c);
+      if (state.selected.size < MAX_COMPARE) state.selected.add(c.id);
+    } else {
+      state.campaigns = state.campaigns.map((x) => (x.id === c.id ? c : x));
+    }
+    dlg.close();
+    save();
+    render();
+  }
+
+  // ---------- Compare ----------
+  function bar(key, rank, items, maxVal) {
+    const def = C.METRIC_DEFS[key];
+    return items.map((it) => {
+      const v = rank.values[it.c.id];
+      const w = C.isNum(v) && maxVal > 0 ? Math.max(2, (v / maxVal) * 100) : 0;
+      const best = rank.best === it.c.id, worst = rank.worst === it.c.id && rank.best !== rank.worst;
+      const tag = best ? '<span class="tag good">Best</span>' : worst ? '<span class="tag bad">Weakest</span>' : '';
+      return `<div class="bar-row">
+        <span class="bar-name"><span class="dot s${colorSlot(it.c.id)}" aria-hidden="true"></span>${esc(it.c.name)}</span>
+        <span class="bar-track">${C.isNum(v) ? `<span class="bar s${colorSlot(it.c.id)}" style="width:${w.toFixed(1)}%"></span>` : `<button class="btn tiny warn" data-edit="${esc(it.c.id)}">Add data</button>`}</span>
+        <span class="bar-val">${C.isNum(v) ? esc(C.formatMetric(key, v, state.settings.currency)) : '—'}${tag}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderCompare() {
+    const host = $('#compare-body');
+    const list = selectedCampaigns();
+    if (list.length < 2) {
+      host.innerHTML = `<div class="empty"><p class="empty-title">Pick at least two campaigns</p><p>Go to <b>Campaigns</b> and tick 2 to ${MAX_COMPARE} of them. ${list.length === 1 ? 'You have one ticked.' : ''}</p><button class="btn" data-tab-go="campaigns">Go to campaigns</button></div>`;
+      return;
+    }
+    const r = C.compare(list, state.settings);
+    state.lastResult = r;
+    const byId = Object.fromEntries(r.items.map((it) => [it.c.id, it]));
+    const leader = byId[r.ranking[0]];
+
+    const notices = [];
+    if (r.mixedObjectives) notices.push(`These campaigns have different objectives, so they were aiming at different funnel levels. Costs are compared on <b>${esc(objLabel(r.objective))}</b> terms; read the funnel section before calling a winner.`);
+    for (const s of r.significance) {
+      if (C.isNum(s.p) && s.p > 0.05) notices.push(`The gap in ${esc(C.METRIC_DEFS[s.key].label.toLowerCase())} between ${esc(byId[s.best].c.name)} and ${esc(byId[s.worst].c.name)} could be chance (p = ${s.p.toFixed(2)}). Run longer before acting on it.`);
+    }
+    const missingCount = r.items.reduce((n, it) => n + gapsFor(it.c).length, 0);
+    if (missingCount && !state.viewer) notices.push(`${missingCount} input${missingCount === 1 ? ' is' : 's are'} missing across these campaigns. Use the <b>Add data</b> buttons to fill them; results update straight away.`);
+
+    const rankingHtml = r.ranking.map((id, i) => {
+      const it = byId[id];
+      return `<li><span class="rank">${i + 1}</span><span class="dot s${colorSlot(id)}" aria-hidden="true"></span><span class="rname">${esc(it.c.name)}</span><span class="chip t-${it.targeting.type}">${esc(tLabel(it.targeting.type))}</span><span class="score">${r.scores[id] > 0 ? '+' : ''}${r.scores[id].toFixed(1)}</span></li>`;
+    }).join('');
+
+    const tiersHtml = r.tiers.map((t) => {
+      const blocks = t.ranks.map((rk) => {
+        const vals = Object.values(rk.values).filter(C.isNum);
+        if (!vals.length) return '';
+        const max = Math.max(...vals);
+        return `<div class="metric"><h4>${esc(C.METRIC_DEFS[rk.key].label)}</h4>${bar(rk.key, rk, r.items, max)}</div>`;
+      }).join('');
+      return `<section class="tier" aria-labelledby="tier-${t.tier}"><header><span class="tier-n">Step ${t.tier}</span><h3 id="tier-${t.tier}">${esc(t.title)}</h3><p>${esc(t.why)}</p></header><div class="metrics">${blocks || '<p class="muted">No data for this step yet.</p>'}</div></section>`;
+    }).join('');
+
+    const funnelRows = C.FUNNEL_LEVELS.map((l) => {
+      const cells = r.items.map((it) => {
+        const aim = it.levels.includes(l.level), has = it.dataLevels.includes(l.level);
+        const kpi = l.kpis.map((k) => (C.isNum(it.m[k]) && C.METRIC_DEFS[k] ? `${C.METRIC_DEFS[k].label.replace(/ \(.*\)/, '')}: ${C.formatMetric(k, it.m[k], state.settings.currency)}` : C.isNum(it.m[k]) ? `${fieldLabel(k)}: ${C.fmtInt(it.m[k])}` : null)).filter(Boolean).slice(0, 2).join('<br>');
+        return `<td class="${aim ? 'f-aim' : has ? 'f-data' : 'f-none'}"><span class="f-state">${aim ? 'Aimed at' : has ? 'Side effect' : '—'}</span>${kpi ? `<span class="f-kpi">${kpi}</span>` : ''}</td>`;
+      }).join('');
+      return `<tr><th scope="row"><span class="lvl">L${l.level}</span> ${esc(l.stage)}<span class="sub">${esc(l.name)}</span></th>${cells}</tr>`;
+    }).join('');
+
+    const swHtml = r.items.map((it) => {
+      const ins = r.insights[it.c.id];
+      const imp = r.recommendations.improve[it.c.id];
+      return `<article class="sw"><h4><span class="dot s${colorSlot(it.c.id)}" aria-hidden="true"></span>${esc(it.c.name)}</h4>
+        <p class="tline"><span class="chip t-${it.targeting.type}">${esc(tLabel(it.targeting.type))} targeting</span> ${esc(it.targeting.reason)}</p>
+        <div class="sw-cols"><div><h5 class="good-t">Strengths</h5><ul>${ins.strengths.map((s) => `<li>${esc(s)}</li>`).join('') || '<li class="muted">None stand out yet.</li>'}</ul></div>
+        <div><h5 class="bad-t">Weaknesses</h5><ul>${ins.weaknesses.map((s) => `<li>${esc(s)}</li>`).join('') || '<li class="muted">None found.</li>'}</ul></div></div>
+        <h5>How to improve it</h5><ol>${imp.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></article>`;
+    }).join('');
+
+    const chartW = Math.max(300, Math.min(1000, host.clientWidth - 38));
+    const charts = window.CampaignCharts ? CampaignCharts.buildCharts(r, { C, cur: state.settings.currency, width: chartW, slot: colorSlot, trendMetric: state.trendMetric }) : [];
+    const trendLabels = window.CampaignCharts ? CampaignCharts.TREND_METRICS : {};
+    const legend = r.items.map((it) => `<li><span class="dot s${colorSlot(it.c.id)}" aria-hidden="true"></span>${esc(it.c.name)}</li>`).join('');
+    const chartsHtml = charts.length ? `<section class="block charts" aria-labelledby="charts-h">
+        <div class="charts-head"><div><h3 id="charts-h">Charts</h3><p class="muted">In the same order as the comparison. Hover or tab onto a mark for exact numbers; every chart also opens as a table.</p></div><ul class="legend" aria-label="Campaign colours">${legend}</ul></div>
+        ${charts.map((ch) => `<figure class="chart" id="chart-${ch.id}"><figcaption><span class="eyebrow">${esc(ch.step)}</span><h4>${esc(ch.title)}</h4><p class="muted">${esc(ch.sub)}</p>${ch.key ? CampaignCharts.keyHtml(ch.key, CampaignCharts.PAL_APP) : ''}${ch.metrics ? `<div class="seg trend-switch" role="group" aria-label="Measure">${ch.metrics.map((k) => `<button data-trend="${k}" aria-pressed="${k === ch.metric}">${esc(trendLabels[k].label)}</button>`).join('')}</div>` : ''}</figcaption>
+          ${ch.svg ? `<div class="chart-box">${ch.svg}</div><p class="chart-note">${esc(ch.note)}</p><details class="chart-data"><summary>Show as table</summary><div class="table-wrap">${ch.table}</div></details>` : `<p class="chart-empty">${esc(ch.empty)}</p>`}</figure>`).join('')}
+      </section>` : '';
+
+    host.innerHTML = `
+      <section class="summary">
+        <div class="lead-card"><p class="eyebrow">Leading campaign</p><p class="lead-name"><span class="dot s${colorSlot(leader.c.id)}" aria-hidden="true"></span>${esc(leader.c.name)}</p>
+          <p class="muted">Scored on ${esc(objLabel(r.objective))} terms: cost and budget count most, then audience and lead quality, then duration.</p>
+          <dl class="kv"><div><dt>CPL</dt><dd>${money(leader.m.cpl)}</dd></div><div><dt>Qualified</dt><dd>${C.fmtPct(leader.m.qualifiedPct)}</dd></div><div><dt>Cost per qualified lead</dt><dd>${money(leader.m.cpql)}</dd></div></dl></div>
+        <div class="ranking"><p class="eyebrow">Overall ranking</p><ol>${rankingHtml}</ol><p class="hint">Score: points for leading a metric, weighted by step (3, 2, 1, 0.5); half a step lost for coming last.</p></div>
+      </section>
+      ${notices.length ? `<ul class="notices">${notices.map((n) => `<li>${n}</li>`).join('')}</ul>` : ''}
+      <div class="dl-row"><span>Download this comparison:</span><button class="btn" data-dl="html">Report (HTML)</button><button class="btn ghost" data-dl="csv">Data (CSV)</button><button class="btn ghost" data-dl="xlsx">Workbook (XLSX)</button><span id="dl-status" role="status"></span>
+        ${state.server && state.meta.me && !state.viewer ? `<span class="owner-only" style="display:contents">${state.source === 'meta' ? '<button class="btn ghost" data-act="save-cmp">Save comparison</button>' : ''}<button class="btn ghost" data-act="share">Share link</button></span>
+        <form class="inline-form owner-only" id="save-cmp-row" hidden><label class="sr" for="save-cmp-name">Name</label><input id="save-cmp-name" maxlength="120" placeholder="e.g. Lead forms vs lookalike" required><button class="btn small" type="submit">Save</button><button class="btn ghost small" type="button" data-act="save-cmp-cancel">Cancel</button></form>
+        <div class="share-out owner-only" id="share-out" hidden></div>` : ''}</div>
+      ${chartsHtml}
+      ${tiersHtml}
+      <section class="block"><h3>Marketing funnel</h3><p class="muted">Each campaign is judged on the levels it aimed at. "Side effect" means it has numbers there without aiming for them.</p>
+        <div class="table-wrap"><table class="funnel"><thead><tr><th>Level</th>${r.items.map((it) => `<th><span class="dot s${colorSlot(it.c.id)}" aria-hidden="true"></span>${esc(it.c.name)}</th>`).join('')}</tr></thead><tbody>${funnelRows}</tbody></table></div></section>
+      <section class="block two"><div><h3>What they have in common</h3><ul>${r.commonality.common.map((x) => `<li>${esc(x)}</li>`).join('') || '<li class="muted">Nothing shared.</li>'}</ul></div>
+        <div><h3>Where they differ</h3><ul>${r.commonality.different.map((x) => `<li>${esc(x)}</li>`).join('') || '<li class="muted">Very similar.</li>'}</ul></div></section>
+      <section class="block"><h3>Strengths, weaknesses and fixes</h3><div class="sw-grid">${swHtml}</div></section>
+      <section class="block"><h3>Plan for a new campaign</h3><p class="muted">Built from what worked best above.</p><ol class="plan">${r.recommendations.newCampaign.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
+        ${r.recommendations.reallocation ? `<p class="whatif"><b>What if you move budget?</b> ${esc(r.recommendations.reallocation.text)}</p>` : ''}</section>`;
+  }
+
+  // ---------- Downloads ----------
+  function reportHtml(r) {
+    const cur = state.settings.currency;
+    const row = (k) => `<tr><th>${esc(C.METRIC_DEFS[k].label)}</th>${r.items.map((it) => `<td>${esc(C.formatMetric(k, it.m[k], cur))}</td>`).join('')}</tr>`;
+    const tierTables = r.tiers.map((t) => `<h2>Step ${t.tier}: ${esc(t.title)}</h2><p>${esc(t.why)}</p><table><thead><tr><th>Metric</th>${r.items.map((it) => `<th>${esc(it.c.name)}</th>`).join('')}</tr></thead><tbody>${t.metrics.map(row).join('')}</tbody></table>`).join('');
+    const per = r.items.map((it) => `<h3>${esc(it.c.name)}</h3><p><b>Targeting:</b> ${esc(tLabel(it.targeting.type))}. ${esc(it.targeting.reason)} <b>Funnel:</b> aims at ${it.levels.map((l) => 'L' + l).join(', ') || 'not set'}.</p><p><b>Strengths</b></p><ul>${r.insights[it.c.id].strengths.map((s) => `<li>${esc(s)}</li>`).join('') || '<li>None stand out.</li>'}</ul><p><b>Weaknesses</b></p><ul>${r.insights[it.c.id].weaknesses.map((s) => `<li>${esc(s)}</li>`).join('') || '<li>None found.</li>'}</ul><p><b>How to improve</b></p><ol>${r.recommendations.improve[it.c.id].map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`).join('');
+    const date = new Date().toISOString().slice(0, 10);
+    const slotOf = (id) => r.items.findIndex((it) => it.c.id === id) + 1;
+    const pc = window.CampaignCharts ? CampaignCharts.buildCharts(r, { C, cur, width: 880, slot: slotOf, print: true }) : [];
+    const swatch = (id) => `<span style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:${CampaignCharts.PAL_PRINT.s[slotOf(id)]}"></span>`;
+    const chartsHtml = pc.length ? `<h2>Charts</h2><p class="legend">${r.items.map((it) => `<span>${swatch(it.c.id)}${esc(it.c.name)}</span>`).join('')}</p>` + pc.map((ch) => `<figure><p class="muted">${esc(ch.step)}</p><h3>${esc(ch.title)}</h3>${ch.key ? CampaignCharts.keyHtml(ch.key, CampaignCharts.PAL_PRINT) : ''}${ch.svg ? ch.svg + `<p>${esc(ch.note)}</p>` : `<p class="muted">${esc(ch.empty)}</p>`}</figure>`).join('') : '';
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Campaign comparison ${date}</title><style>
+      body{font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#16202c;max-width:960px;margin:32px auto;padding:0 20px}
+      h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 6px;border-bottom:1px solid #d9dee6;padding-bottom:4px}h3{font-size:16px;margin:20px 0 4px}
+      table{border-collapse:collapse;width:100%;margin:8px 0 12px;font-variant-numeric:tabular-nums}th,td{border:1px solid #d9dee6;padding:6px 8px;text-align:left;vertical-align:top}thead th{background:#eef1f5}
+      .muted{color:#5b6675}figure{margin:16px 0 24px;break-inside:avoid}figure h3{margin:0 0 6px}figure .muted{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.06em}svg{max-width:100%;height:auto;display:block;margin:8px 0}.legend span,.chart-key span{display:inline-flex;align-items:center;gap:4px;margin-right:16px;font-size:13px}.chart-key{display:block;margin:4px 0}@media print{body{margin:0}h2{break-after:avoid}table{break-inside:avoid}}</style></head><body>
+      <h1>Campaign comparison</h1><p class="muted">Generated ${date} with Campaign Analyser. Currency: ${esc(cur)}. Objective basis: ${esc(objLabel(r.objective))}.</p>
+      <h2>Overall ranking</h2><ol>${r.ranking.map((id) => { const it = r.items.find((x) => x.c.id === id); return `<li>${esc(it.c.name)} (score ${r.scores[id].toFixed(1)})</li>`; }).join('')}</ol>
+      ${chartsHtml}
+      ${tierTables}
+      <h2>Marketing funnel</h2><table><thead><tr><th>Level</th>${r.items.map((it) => `<th>${esc(it.c.name)}</th>`).join('')}</tr></thead><tbody>${C.FUNNEL_LEVELS.map((l) => `<tr><th>L${l.level} ${esc(l.stage)}: ${esc(l.name)}</th>${r.items.map((it) => `<td>${it.levels.includes(l.level) ? 'Aimed at' : it.dataLevels.includes(l.level) ? 'Side effect' : '—'}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <h2>Common ground and differences</h2><p><b>In common</b></p><ul>${r.commonality.common.map((x) => `<li>${esc(x)}</li>`).join('') || '<li>Nothing shared.</li>'}</ul><p><b>Different</b></p><ul>${r.commonality.different.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <h2>Campaign by campaign</h2>${per}
+      <h2>Plan for a new campaign</h2><ol>${r.recommendations.newCampaign.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>${r.recommendations.reallocation ? `<p>${esc(r.recommendations.reallocation.text)}</p>` : ''}
+      <p class="muted">To save as PDF: open this file in a browser and use Print → Save as PDF.</p></body></html>`;
+  }
+
+  async function offerFile(filename, data, mime) {
+    const status = $('#dl-status');
+    status.textContent = '';
+    try {
+      const dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+      if (dl) {
+        await dl.save({ filename, data });
+        status.textContent = 'Saved.';
+        return;
+      }
+    } catch (e) {
+      if (e && e.code === 'declined') { status.textContent = 'Download cancelled.'; return; }
+      if (e && e.code && !['unavailable', 'not_granted', 'capability_disabled', 'capability_removed'].includes(e.code)) { status.textContent = `Could not save (${e.code}).`; return; }
+    }
+    // Opened as a local file or on GitHub Pages: a normal browser download.
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    status.textContent = 'Download started.';
+  }
+
+  function download(kind) {
+    const r = state.lastResult;
+    if (!r) return;
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (kind === 'html') offerFile(`campaign-report-${stamp}.html`, reportHtml(r), 'text/html');
+    if (kind === 'csv') offerFile(`campaign-comparison-${stamp}.csv`, C.toCsv(r), 'text/csv');
+    if (kind === 'xlsx' && typeof XLSX === 'undefined') { $('#dl-status').textContent = 'The Excel writer did not load. Use CSV instead.'; return; }
+    if (kind === 'xlsx') {
+      const aoa = C.toRows(r);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Comparison');
+      const insights = [['Campaign', 'Type', 'Text']];
+      r.items.forEach((it) => {
+        r.insights[it.c.id].strengths.forEach((s) => insights.push([it.c.name, 'Strength', s]));
+        r.insights[it.c.id].weaknesses.forEach((s) => insights.push([it.c.name, 'Weakness', s]));
+        r.recommendations.improve[it.c.id].forEach((s) => insights.push([it.c.name, 'Improve', s]));
+      });
+      r.recommendations.newCampaign.forEach((s) => insights.push(['New campaign', 'Plan', s]));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(insights), 'Insights');
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      offerFile(`campaign-comparison-${stamp}.xlsx`, new Blob([buf]), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+  }
+
+  // ---------- Settings ----------
+  function openSettings() {
+    const s = state.settings;
+    $('#s-currency').value = s.currency;
+    $('#s-targetCpl').value = s.targetCpl ?? '';
+    $('#s-targetQ').value = Math.round((s.targetQualifiedPct ?? 0.3) * 100);
+    $('#s-open').value = s.openUniverseMin;
+    $('#s-focused').value = s.focusedUniverseMax;
+    $('#settings').showModal();
+  }
+  function saveSettings(e) {
+    e.preventDefault();
+    const num = (id) => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+    state.settings = {
+      ...state.settings,
+      currency: $('#s-currency').value,
+      targetCpl: num('#s-targetCpl'),
+      targetQualifiedPct: (num('#s-targetQ') ?? 30) / 100,
+      openUniverseMin: num('#s-open') ?? C.DEFAULT_SETTINGS.openUniverseMin,
+      focusedUniverseMax: num('#s-focused') ?? C.DEFAULT_SETTINGS.focusedUniverseMax,
+    };
+    $('#settings').close();
+    save();
+    render();
+  }
+
+  // ---------- Meta connection (only when the app is served by the Node server) ----------
+  const LEVEL_LABELS = { campaign: 'Campaigns', adset: 'Ad sets', ad: 'Ads' };
+  const PRESETS = [['last7', 'Last 7 days'], ['last14', 'Last 14 days'], ['last30', 'Last 30 days'], ['last90', 'Last 90 days'], ['this_month', 'This month'], ['last_month', 'Last month'], ['custom', 'Custom dates']];
+  const META_EDITABLE = new Set(['qualifiedLeads', 'universe', 'budget', 'targeting', 'targetingNotes', 'objective']);
+  const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+  function presetRange(preset, since, until) {
+    const today = new Date();
+    const back = (n) => isoDay(new Date(today.getTime() - n * 86400000));
+    switch (preset) {
+      case 'last7': return { since: back(6), until: back(0) };
+      case 'last14': return { since: back(13), until: back(0) };
+      case 'last90': return { since: back(89), until: back(0) };
+      case 'this_month': return { since: isoDay(new Date(today.getFullYear(), today.getMonth(), 1)), until: back(0) };
+      case 'last_month': return { since: isoDay(new Date(today.getFullYear(), today.getMonth() - 1, 1)), until: isoDay(new Date(today.getFullYear(), today.getMonth(), 0)) };
+      case 'custom': if (since && until && since <= until) return { since, until }; // falls through
+      default: return { since: back(29), until: back(0) };
+    }
+  }
+  function ago(ms) {
+    if (!ms) return 'never';
+    const s = Math.round((Date.now() - ms) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.round(s / 60)} min ago`;
+    if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+    return `${Math.round(s / 86400)} days ago`;
+  }
+  const fmtDay = (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '');
+
+  async function api(method, path, body) {
+    const headers = { accept: 'application/json' };
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (method !== 'GET' && state.meta.me) headers['x-csrf-token'] = state.meta.me.csrf;
+    const res = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && path !== '/api/me') state.meta.me = null;
+    if (!res.ok) { const e = new Error(data.error || `Request failed (${res.status})`); e.status = res.status; e.data = data; throw e; }
+    return data;
+  }
+
+  async function detectServer() {
+    if (!/^https?:$/.test(location.protocol)) return;
+    try {
+      const h = await fetch('/api/health', { headers: { accept: 'application/json' } });
+      if (!h.ok) return;
+      const j = await h.json();
+      if (!j || !j.ok) return;
+      state.server = j;
+    } catch (e) { return; }
+    try { state.meta.me = await api('GET', '/api/me'); } catch (e) { state.meta.me = null; }
+    if (state.meta.me) await refreshAccounts();
+  }
+
+  async function refreshAccounts() {
+    const [a, c] = await Promise.all([api('GET', '/api/accounts'), api('GET', '/api/comparisons')]);
+    state.meta.accounts = a.accounts;
+    state.meta.comparisons = c.comparisons;
+    if (!state.meta.accounts.some((x) => x.id === state.meta.accountId)) state.meta.accountId = (state.meta.accounts.find((x) => x.selected) || state.meta.accounts[0] || {}).id || null;
+  }
+  const currentAccount = () => state.meta.accounts.find((a) => a.id === state.meta.accountId) || null;
+
+  function switchSource(to) {
+    if (to === state.source) return;
+    if (to === 'meta') {
+      state.fileStash = { campaigns: state.campaigns, selected: [...state.selected], isExample: state.isExample, warnings: state.warnings };
+      state.campaigns = state.meta.items || [];
+      state.selected = new Set(state.meta.selectedIds || []);
+      state.isExample = false;
+      state.warnings = [];
+      state.source = 'meta';
+      if (state.meta.me && state.meta.accountId && !state.meta.items) loadEntities();
+    } else {
+      state.meta.items = state.campaigns;
+      state.meta.selectedIds = [...state.selected];
+      const f = state.fileStash || { campaigns: [], selected: [] };
+      state.campaigns = f.campaigns; state.selected = new Set(f.selected); state.isExample = !!f.isExample; state.warnings = f.warnings || [];
+      state.fileStash = null;
+      state.source = 'files';
+    }
+    save();
+    render();
+  }
+
+  // Pick the biggest spenders that share the top spender's objective, so the first comparison makes sense.
+  function autoSelect(items) {
+    if (!items.length) return [];
+    const obj = items[0].objective;
+    return items.filter((c) => c.objective === obj).slice(0, 3).map((c) => c.id);
+  }
+
+  async function loadEntities({ keepSelection = true } = {}) {
+    const acct = currentAccount();
+    if (!acct) return;
+    if (!acct.lastSyncedAt) {
+      if (acct.syncState !== 'running') return startMetaSync();
+      return pollSync();
+    }
+    const { since, until } = presetRange(state.meta.preset, state.meta.since, state.meta.until);
+    state.meta.loading = true; state.meta.error = null; renderSource();
+    try {
+      const d = await api('GET', `/api/accounts/${acct.id}/entities?level=${state.meta.level}&since=${since}&until=${until}`);
+      state.meta.range = { since: d.since, until: d.until };
+      Object.assign(acct, d.account);
+      const items = d.campaigns.map(C.normaliseCampaign);
+      state.meta.items = items;
+      if (state.source === 'meta') {
+        state.campaigns = items;
+        const keep = keepSelection ? [...state.selected].filter((id) => items.some((c) => c.id === id)) : [];
+        state.selected = new Set(keep.length >= 2 ? keep : (state.meta.pendingSelection || autoSelect(items)).filter((id) => items.some((c) => c.id === id)));
+        state.meta.pendingSelection = null;
+      }
+      if (d.currency) state.settings.currency = d.currency;
+    } catch (e) {
+      state.meta.error = e.message;
+    } finally {
+      state.meta.loading = false;
+      save();
+      render();
+    }
+  }
+
+  // A sync runs in steps (hosted functions are time-limited). Keep calling while
+  // the server says 'partial', and show progress from a light poll meanwhile.
+  let syncing = false;
+  async function startMetaSync() {
+    const acct = currentAccount();
+    if (!acct || syncing) return;
+    syncing = true;
+    acct.syncState = 'running';
+    acct.syncProgress = 'Starting';
+    renderSource();
+    const poll = setInterval(async () => {
+      try { const d = await api('GET', `/api/accounts/${acct.id}`); if (d.account.syncState === 'running') { Object.assign(acct, d.account); renderSource(); } } catch (e) { /* ignore */ }
+    }, 2000);
+    try {
+      for (let step = 0; step < 50; step++) {
+        const d = await api('POST', `/api/accounts/${acct.id}/sync`, {});
+        Object.assign(acct, d.account);
+        renderSource();
+        if (acct.syncState !== 'partial') break;
+      }
+    } catch (e) {
+      state.meta.error = e.message;
+      if (e.data && e.data.reconnect && state.meta.me) state.meta.me.connection.status = 'reconnect';
+    } finally {
+      clearInterval(poll);
+      syncing = false;
+    }
+    if (acct.syncState === 'running') pollSync(); // another tab or the daily job is syncing
+    else await loadEntities();
+  }
+
+  let pollTimer = null;
+  function pollSync() {
+    clearTimeout(pollTimer);
+    const acct = currentAccount();
+    if (!acct) return;
+    if (acct.syncState === 'partial' && !syncing) { startMetaSync(); return; } // finish an interrupted sync
+    if (acct.syncState !== 'running') return;
+    pollTimer = setTimeout(async () => {
+      try {
+        const d = await api('GET', `/api/accounts/${acct.id}`);
+        Object.assign(acct, d.account);
+      } catch (e) { /* keep polling */ }
+      if (acct.syncState === 'running' || acct.syncState === 'partial') { renderSource(); pollSync(); }
+      else loadEntities();
+    }, 2000);
+  }
+
+  async function setAutoSync(on) {
+    const acct = currentAccount();
+    if (!acct) return;
+    try {
+      const d = await api('PUT', `/api/accounts/${acct.id}/settings`, { autoSync: on });
+      Object.assign(acct, d.account);
+    } catch (e) { state.meta.error = e.message; }
+    renderSource();
+  }
+
+  function syncStatusHtml(acct) {
+    if (!acct) return '';
+    if (acct.syncState === 'running' || acct.syncState === 'partial') return `<span class="sync-status" role="status"><span class="spinner" aria-hidden="true"></span>${esc(acct.syncProgress || 'Syncing')}…</span>`;
+    if (state.meta.loading) return `<span class="sync-status" role="status"><span class="spinner" aria-hidden="true"></span>Loading…</span>`;
+    if (acct.syncState === 'error' || acct.syncState === 'reconnect') return `<span class="sync-status err" role="status">${esc(acct.syncError || 'Sync failed')}</span>`;
+    if (acct.syncState === 'waiting') return `<span class="sync-status" role="status">${esc(acct.syncError || 'Waiting for Meta')} Next try ${acct.nextAttemptAt ? new Date(acct.nextAttemptAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'soon'}.</span>`;
+    const extra = acct.syncError ? ` · ${esc(acct.syncError)}` : '';
+    return `<span class="sync-status" role="status">Synced ${ago(acct.lastSyncedAt)}${acct.syncedUntil ? ` · data to ${fmtDay(acct.syncedUntil)}` : ''}${extra}</span>`;
+  }
+
+  function renderSource() {
+    const host = $('#source-bar');
+    if (!host) return;
+    $('#file-import').hidden = state.source === 'meta';
+    if (!state.server) { host.innerHTML = ''; return; }
+    const pressed = (v) => `aria-pressed="${state.source === v}"`;
+    let html = `<div class="seg" role="group" aria-label="Data source"><button data-source="meta" ${pressed('meta')}>Meta ads</button><button data-source="files" ${pressed('files')}>Imported files</button></div>`;
+    if (state.source === 'meta') {
+      const me = state.meta.me;
+      const err = state.meta.error ? `<p class="notices" role="alert" style="padding-left:14px">${esc(state.meta.error)}</p>` : '';
+      if (!me) {
+        html += `<div class="connect-card"><div><h2>Connect your Meta ad account</h2>
+          <p class="muted">Read-only access (<code>ads_read</code>): campaigns, ad sets, ads and daily results sync automatically once a day. Nothing in your ad account is ever changed.</p>
+          ${state.server.mode === 'demo' ? '<p class="demo-note">Demo mode: this connects to a <b>simulated</b> ad account with made-up data. Add your Meta app ID to <code>.env</code> to use a real one.</p>' : ''}</div>
+          <a class="btn fb" href="/auth/meta/start">Continue with Facebook</a></div>${err}`;
+      } else {
+        const acct = currentAccount();
+        const conn = me.connection || {};
+        let warn = '';
+        if (conn.status === 'reconnect') warn = `<p class="notices" role="alert" style="padding-left:14px">Your Meta connection has expired or was removed. <a href="/auth/meta/start">Reconnect</a> to keep syncing.</p>`;
+        else if (conn.daysLeft !== null && conn.daysLeft <= 7) warn = `<p class="notices" style="padding-left:14px">Meta connections last 60 days. Yours ends in ${Math.max(0, conn.daysLeft)} day${conn.daysLeft === 1 ? '' : 's'}: <a href="/auth/meta/start">reconnect now</a> to avoid a gap.</p>`;
+        if (!state.meta.accounts.length) {
+          html += `<div class="connect-card"><div><h2>No ad accounts found</h2><p class="muted">Signed in as ${esc(me.name)}, but this Facebook profile can't see any ad accounts. Ask the account owner to add you in Business Settings, then try again.</p></div><button class="btn" data-act="refresh-accounts">Check again</button></div>`;
+        } else {
+          const custom = state.meta.preset === 'custom';
+          const r = presetRange(state.meta.preset, state.meta.since, state.meta.until);
+          html += `<div class="meta-bar">
+            <label class="grow" for="m-account">Ad account<select id="m-account">${state.meta.accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === state.meta.accountId ? 'selected' : ''}>${esc(a.name || a.id)}${a.currency ? ' · ' + esc(a.currency) : ''}</option>`).join('')}</select></label>
+            <label for="m-preset">Dates<select id="m-preset">${PRESETS.map(([v, l]) => `<option value="${v}" ${v === state.meta.preset ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            ${custom ? `<label for="m-since">From<input type="date" id="m-since" value="${esc(r.since)}"></label><label for="m-until">To<input type="date" id="m-until" value="${esc(r.until)}"></label>` : ''}
+            <div><span class="sr">Level</span><div class="seg" role="group" aria-label="Level">${Object.entries(LEVEL_LABELS).map(([v, l]) => `<button data-level="${v}" aria-pressed="${state.meta.level === v}">${l}</button>`).join('')}</div></div>
+            <button class="btn small" data-act="sync" ${acct && (acct.syncState === 'running' || acct.syncState === 'partial') ? 'disabled' : ''}>Sync now</button>
+            ${acct ? `<label class="switch" for="m-autosync"><input type="checkbox" role="switch" id="m-autosync" ${acct.autoSync ? 'checked' : ''}><span>Auto-sync daily</span></label>` : ''}
+            ${syncStatusHtml(acct)}
+          </div>`;
+        }
+        const saved = state.meta.comparisons.length ? `<span class="saved" aria-label="Saved comparisons"><b>Saved:</b>${state.meta.comparisons.map((c) => `<span class="chip-btn"><button data-cmp="${esc(c.id)}" title="${esc(LEVEL_LABELS[c.level] || '')}, ${esc(PRESETS.find((p) => p[0] === c.preset)?.[1] || 'custom dates')}">${esc(c.name)}</button><button data-cmp-del="${esc(c.id)}" aria-label="Delete saved comparison ${esc(c.name)}">×</button></span>`).join('')}</span>` : '';
+        html += `${warn}${err}<div class="meta-sub">${saved}<span class="spacer"></span><button class="linkish" data-act="shares">Shared links</button><span>Signed in as ${esc(me.name)}${state.server.mode === 'demo' ? ' (demo)' : ''}</span><button class="linkish" data-act="logout">Sign out</button><button class="linkish" data-act="delete-me">Delete my data</button></div>
+          <div class="confirm" id="confirm-delete-me" hidden><span>Delete your Meta connection and every synced number, note and share link from this app? Your ad account itself is not touched.</span><button class="btn danger small" data-act="delete-me-yes">Delete everything</button><button class="btn ghost small" data-act="delete-me-no">Cancel</button></div>`;
+      }
+    }
+    host.innerHTML = `<div class="source">${html}</div>`;
+  }
+
+  async function applySaved(id) {
+    const c = state.meta.comparisons.find((x) => x.id === id);
+    if (!c) return;
+    if (c.accountId) state.meta.accountId = c.accountId;
+    state.meta.level = c.level || 'campaign';
+    state.meta.preset = c.preset || 'custom';
+    state.meta.since = c.since; state.meta.until = c.until;
+    state.meta.pendingSelection = c.entityIds;
+    state.selected = new Set();
+    await loadEntities({ keepSelection: false });
+    state.tab = 'compare';
+    render();
+  }
+
+  async function openShares() {
+    const body = $('#shares-body');
+    body.innerHTML = '<p class="muted">Loading…</p>';
+    $('#shares-dlg').showModal();
+    try {
+      const { shares } = await api('GET', '/api/shares');
+      body.innerHTML = shares.length ? `<ul class="share-list">${shares.map((s) => `<li><b>${esc(s.title)}</b>
+        <span class="muted">${s.active ? `Expires ${new Date(s.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : s.revoked ? 'Revoked' : 'Expired'} · ${s.views} view${s.views === 1 ? '' : 's'}${s.lastViewedAt ? `, last ${ago(s.lastViewedAt)}` : ''}</span>
+        ${s.active ? `<div class="row"><code>${esc(s.url)}</code><button class="btn tiny ghost" data-copy="${esc(s.url)}">Copy</button><button class="btn tiny danger" data-revoke="${esc(s.token)}">Revoke</button></div>` : ''}</li>`).join('')}</ul>` : '<p class="muted">No shared links yet. Open a comparison and choose <b>Share link</b>.</p>';
+    } catch (e) { body.innerHTML = `<p class="notices">${esc(e.message)}</p>`; }
+  }
+
+  function shareSnapshot() {
+    const list = selectedCampaigns().map((c) => { const { autoValues, manualKeys, ...rest } = c; return rest; });
+    const range = state.source === 'meta' ? state.meta.range : null;
+    const single = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
+    const title = (state.source === 'meta' ? `${single[state.meta.level]} comparison` : 'Campaign comparison') + (range ? `, ${fmtDay(range.since)} – ${fmtDay(range.until)}` : '');
+    return { title, campaigns: list, settings: state.settings, range };
+  }
+
+  async function copyText(text, btn) {
+    try { await navigator.clipboard.writeText(text); if (btn) { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); } }
+    catch (e) { const r = document.createRange(); const code = btn && btn.parentElement.querySelector('code'); if (code) { r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); } }
+  }
+
+  async function handleMetaAction(t) {
+    const act = t.dataset.act;
+    if (act === 'sync') return startMetaSync();
+    if (act === 'refresh-accounts') { await api('POST', '/api/accounts/refresh', {}).then((d) => { state.meta.accounts = d.accounts; }).catch((e) => { state.meta.error = e.message; }); return render(); }
+    if (act === 'logout') { await api('POST', '/auth/logout', {}).catch(() => {}); state.meta = { ...state.meta, me: null, accounts: [], items: null, comparisons: [] }; state.campaigns = []; state.selected.clear(); return render(); }
+    if (act === 'delete-me') { $('#confirm-delete-me').hidden = false; return; }
+    if (act === 'delete-me-no') { $('#confirm-delete-me').hidden = true; return; }
+    if (act === 'delete-me-yes') { await api('DELETE', '/api/me').catch((e) => { state.meta.error = e.message; }); state.meta = { ...state.meta, me: null, accounts: [], items: null, comparisons: [] }; state.campaigns = []; state.selected.clear(); return render(); }
+    if (act === 'shares') return openShares();
+    if (act === 'save-cmp') { $('#save-cmp-row').hidden = false; $('#save-cmp-name').focus(); return; }
+    if (act === 'save-cmp-cancel') { $('#save-cmp-row').hidden = true; return; }
+    if (act === 'share') {
+      const out = $('#share-out');
+      out.hidden = false;
+      out.innerHTML = '<span class="muted">Creating link…</span>';
+      try {
+        const { share } = await api('POST', '/api/shares', shareSnapshot());
+        const local = /\/\/(localhost|127\.0\.0\.1)/.test(share.url);
+        out.innerHTML = `<span>Anyone with this link can view this comparison (read-only) until ${new Date(share.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}. It's a snapshot: later syncs don't change it.</span>
+          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><code>${esc(share.url)}</code><button class="btn tiny" data-copy="${esc(share.url)}">Copy</button></div>
+          ${local ? '<span class="muted">This app is running on your computer, so the link only opens here. It will work for others once the app is hosted online.</span>' : ''}`;
+      } catch (e) { out.innerHTML = `<span class="notices">${esc(e.message)}</span>`; }
+    }
+  }
+
+  async function saveComparison(e) {
+    e.preventDefault();
+    const name = $('#save-cmp-name').value.trim();
+    if (!name) return;
+    try {
+      const r = presetRange(state.meta.preset, state.meta.since, state.meta.until);
+      const { comparison } = await api('POST', '/api/comparisons', { name, accountId: state.meta.accountId, level: state.meta.level, preset: state.meta.preset, since: state.meta.preset === 'custom' ? r.since : null, until: state.meta.preset === 'custom' ? r.until : null, entityIds: [...state.selected] });
+      state.meta.comparisons.unshift(comparison);
+      $('#save-cmp-row').innerHTML = `<span class="muted">Saved as “${esc(comparison.name)}”. Find it on the Campaigns tab; it refreshes with new data.</span>`;
+    } catch (err) { $('#save-cmp-row').insertAdjacentHTML('beforeend', `<span class="notices">${esc(err.message)}</span>`); }
+  }
+
+  async function fillUsage() {
+    const box = $('#usage-box');
+    if (!box) return;
+    if (!state.meta.me) { box.hidden = true; return; }
+    try {
+      const u = await api('GET', '/api/usage');
+      const t = u.thisMonth || {};
+      box.innerHTML = `<b>Usage this month</b><span>${t.sync || 0} syncs · ${t.meta_api_calls || 0} Meta API calls · ${t.share_created || 0} share links · ${t.comparison_saved || 0} saved comparisons</span><span>${u.totals.adAccountsSynced} ad account${u.totals.adAccountsSynced === 1 ? '' : 's'} syncing · ${u.totals.activeShareLinks} active share link${u.totals.activeShareLinks === 1 ? '' : 's'}</span>`;
+      box.hidden = false;
+    } catch (e) { box.hidden = true; }
+  }
+
+  function startViewer(snap) {
+    state.viewer = snap;
+    state.campaigns = (snap.campaigns || []).map(C.normaliseCampaign);
+    state.selected = new Set(state.campaigns.map((c) => c.id));
+    state.settings = { ...C.DEFAULT_SETTINGS, ...(snap.settings || {}) };
+    state.tab = 'compare';
+    document.body.classList.add('viewer');
+    const b = $('#viewer-banner');
+    b.innerHTML = `<b>${esc(snap.title || 'Shared comparison')}</b><span>Read-only snapshot${snap.range ? ` of ${fmtDay(snap.range.since)} – ${fmtDay(snap.range.until)}` : ''}, shared ${new Date(snap.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. Link expires ${new Date(snap.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}.</span>`;
+    b.hidden = false;
+    document.title = (snap.title || 'Shared comparison') + ' · Campaign Analyser';
+  }
+
+  // ---------- Events ----------
+  function wire() {
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest('button, [data-tab-go]');
+      if (!t) return;
+      if (t.dataset.source) { switchSource(t.dataset.source); return; }
+      if (t.dataset.level) { state.meta.level = t.dataset.level; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
+      if (t.dataset.act) { handleMetaAction(t); return; }
+      if (t.dataset.cmp) { applySaved(t.dataset.cmp); return; }
+      if (t.dataset.cmpDel) { api('DELETE', `/api/comparisons/${encodeURIComponent(t.dataset.cmpDel)}`).then(() => { state.meta.comparisons = state.meta.comparisons.filter((c) => c.id !== t.dataset.cmpDel); renderSource(); }).catch(() => {}); return; }
+      if (t.dataset.copy) { copyText(t.dataset.copy, t); return; }
+      if (t.dataset.revoke) { api('DELETE', `/api/shares/${encodeURIComponent(t.dataset.revoke)}`).then(openShares).catch(() => {}); return; }
+      if (t.dataset.close) { $('#' + t.dataset.close).close(); return; }
+      if (t.dataset.trend) { state.trendMetric = t.dataset.trend; renderCompare(); return; }
+      if (t.classList.contains('tab')) { state.tab = t.dataset.tab; save(); render(); window.scrollTo(0, 0); }
+      else if (t.dataset.tabGo) { state.tab = t.dataset.tabGo; save(); render(); }
+      else if (t.dataset.edit) openEditor(t.dataset.edit);
+      else if (t.dataset.dl) download(t.dataset.dl);
+      else if (t.id === 'btn-add') openEditor(null);
+      else if (t.id === 'btn-example') { loadExample(); render(); }
+      else if (t.id === 'btn-clear') $('#confirm-clear').hidden = false;
+      else if (t.id === 'btn-clear-yes') { state.campaigns = []; state.selected.clear(); state.isExample = false; state.warnings = []; $('#confirm-clear').hidden = true; save(); render(); }
+      else if (t.id === 'btn-clear-no') $('#confirm-clear').hidden = true;
+      else if (t.id === 'btn-settings') { openSettings(); fillUsage(); }
+      else if (t.id === 'editor-cancel') $('#editor').close();
+      else if (t.id === 'settings-cancel') $('#settings').close();
+      else if (t.id === 'editor-delete') {
+        const id = state.editingId;
+        state.campaigns = state.campaigns.filter((c) => c.id !== id);
+        state.selected.delete(id);
+        $('#editor').close();
+        save();
+        render();
+      }
+    });
+    document.addEventListener('change', (e) => {
+      const tid = e.target.id;
+      if (tid === 'm-autosync') { setAutoSync(e.target.checked); return; }
+      if (tid === 'm-account') { state.meta.accountId = e.target.value; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
+      if (tid === 'm-preset') { state.meta.preset = e.target.value; if (e.target.value === 'custom') { const r = presetRange('last30'); state.meta.since = state.meta.since || r.since; state.meta.until = state.meta.until || r.until; } save(); loadEntities(); return; }
+      if (tid === 'm-since' || tid === 'm-until') { state.meta[tid === 'm-since' ? 'since' : 'until'] = e.target.value; if (state.meta.since && state.meta.until && state.meta.since <= state.meta.until) { save(); loadEntities(); } return; }
+      const id = e.target.dataset && e.target.dataset.select;
+      if (!id) return;
+      if (e.target.checked) state.selected.add(id); else state.selected.delete(id);
+      save();
+      render();
+    });
+    $('#file').addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
+    const dz = $('#dropzone');
+    ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('over'); }));
+    dz.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+    $('#editor-form').addEventListener('submit', saveEditor);
+    $('#settings-form').addEventListener('submit', saveSettings);
+    document.addEventListener('submit', (e) => { if (e.target.id === 'save-cmp-row') saveComparison(e); });
+    if (location.hash === '#guide' || location.hash === '#compare') state.tab = location.hash.slice(1);
+
+    // Chart tooltips: one shared box, shown on hover and on keyboard focus.
+    const tip = $('#chart-tip');
+    const showTip = (el, x, y) => {
+      tip.textContent = el.dataset.tip;
+      tip.hidden = false;
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      const left = Math.min(window.innerWidth - w - 8, Math.max(8, x + 14));
+      const top = y - h - 12 < 8 ? y + 18 : y - h - 12;
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+    };
+    const hideTip = () => { tip.hidden = true; };
+    document.addEventListener('pointermove', (e) => {
+      const el = e.target.closest && e.target.closest('[data-tip]');
+      if (el) showTip(el, e.clientX, e.clientY); else if (!tip.hidden) hideTip();
+    });
+    document.addEventListener('focusin', (e) => {
+      const el = e.target.closest && e.target.closest('[data-tip]');
+      if (!el) return hideTip();
+      const b = el.getBoundingClientRect();
+      showTip(el, b.left + b.width / 2, b.top);
+    });
+    document.addEventListener('scroll', hideTip, { passive: true });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
+
+    // Redraw charts when the width changes enough to matter.
+    let lastW = window.innerWidth, timer;
+    window.addEventListener('resize', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (Math.abs(window.innerWidth - lastW) < 40) return;
+        lastW = window.innerWidth;
+        if (state.tab === 'compare') renderCompare();
+      }, 180);
+    });
+  }
+
+  async function start() {
+    if (window.__SHARE__) {
+      startViewer(window.__SHARE__);
+      wire();
+      render();
+      return;
+    }
+    if (!load()) loadExample();
+    wire();
+    render();
+    await detectServer();
+    const hash = location.hash;
+    if (hash.startsWith('#connect-error')) state.meta.error = 'Signing in with Meta did not finish. Try again; if it keeps failing, check the app settings in SETUP-META.md.';
+    if (state.server && (hash === '#connected' || hash.startsWith('#connect-error') || state.wantSource === 'meta')) {
+      if (hash === '#connected' || hash.startsWith('#connect-error')) { history.replaceState(null, '', location.pathname); state.tab = 'campaigns'; }
+      switchSource('meta');
+      pollSync();
+    }
+    render();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+
+</script>
+</body>
+</html>

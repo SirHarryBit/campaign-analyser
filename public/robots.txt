@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /r/
+Disallow: /api/
+Disallow: /auth/
