@@ -262,6 +262,13 @@ legend { font: 600 13px var(--f-body); padding: 0 6px; color: var(--ink-2); text
 .connect-card h2 { font-size: 20px; margin: 0; }
 .connect-card p { margin: 0; }
 .btn.fb { background: #1877f2; border-color: #1877f2; color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.token-form { display: grid; gap: 8px; margin-top: 6px; max-width: 34rem; }
+.token-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.token-row input { flex: 1 1 14rem; min-width: 0; font: 14px var(--f-mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.token-help summary { cursor: pointer; font-size: 13.5px; color: var(--accent); width: max-content; }
+.token-help ol { margin: 6px 0 0; padding-left: 20px; font-size: 13.5px; display: grid; gap: 4px; }
+.token-status { margin: 0; font-size: 13.5px; color: var(--ink-2); min-height: 1em; }
+.token-status.err { color: var(--bad); }
 .demo-note { font-size: 13.5px; background: var(--warn-soft); padding: 6px 10px; border-radius: 8px; }
 .meta-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .meta-bar > * { min-width: 0; }
@@ -364,7 +371,7 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
       </nav>
       <article>
         <section id="g-connect"><h2>Connecting Meta</h2>
-          <p>When the app runs on its server (<code>npm start</code>), choose <b>Meta ads → Continue with Facebook</b>. Access is read-only: nothing in your ad account can be changed.</p>
+          <p>When the app runs on its server (<code>npm start</code>), choose <b>Meta ads</b> and paste an access token from your Meta app (<b>Marketing API → Tools</b>, tick <code>ads_read</code> only, <b>Get Token</b>). Paste it only here, never into a chat or email. Access is read-only: nothing in your ad account can be changed.</p>
           <ol>
             <li><b>Pick the ad account.</b> The first sync pulls the last 90 days. <b>Auto-sync daily</b> keeps it fresh; switch it off to sync only when you press <b>Sync now</b>.</li>
             <li><b>Choose dates and level</b>: campaigns, ad sets or ads. The list shows everything that spent money in that period, biggest first, and ticks the top three with the same objective.</li>

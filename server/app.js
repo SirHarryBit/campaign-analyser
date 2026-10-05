@@ -198,14 +198,44 @@ async function createApp(config, { sleep, log = console } = {}) {
   };
   const plainPage = (title, body) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:0 16px">${body}</body>`;
 
+  /**
+   * Finish signing in with a Meta user token (from Facebook Login or pasted in):
+   * store it encrypted, remember the ad accounts it can see, start a session.
+   * Returns the session id.
+   */
+  async function signInWithToken(token, expiresAt) {
+    const me = await client(token).get('me', { fields: 'id,name' });
+    const now = Date.now();
+    await db.run(`INSERT INTO users (id, name, token_enc, token_expires_at, token_status, created_at, last_login_at) VALUES (?, ?, ?, ?, 'ok', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, token_enc = excluded.token_enc, token_expires_at = excluded.token_expires_at, token_status = 'ok', last_login_at = excluded.last_login_at`,
+    me.id, me.name, S.encrypt(token, config.key), expiresAt ?? null, now, now);
+    await upsertAccounts(me.id, await client(token).all('me/adaccounts', { fields: 'id,name,currency,timezone_name,account_status', limit: 100 }));
+    await db.run(`UPDATE ad_accounts SET sync_state = CASE WHEN sync_state = 'reconnect' THEN 'ok' ELSE sync_state END WHERE user_id = ?`, me.id);
+    const sid = S.randomId(32);
+    await db.run('INSERT INTO sessions (id, user_id, csrf, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', sid, me.id, S.randomId(24), now, now + SESSION_DAYS * DAY);
+    await track(me.id, 'login');
+    return sid;
+  }
+
+  /** Swap a short-lived token for a 60-day one. Falls back to the original if Meta refuses. */
+  async function longLived(token) {
+    const g = new GraphClient({ token: '', version: meta.version, baseUrl: meta.graphUrl, sleep });
+    try {
+      const r = await g.getNoAuth('oauth/access_token', { grant_type: 'fb_exchange_token', client_id: meta.appId, client_secret: meta.appSecret, fb_exchange_token: token });
+      if (r.access_token) return { token: r.access_token, expiresAt: r.expires_in ? Date.now() + Number(r.expires_in) * 1000 : null };
+    } catch (e) { /* keep the original */ }
+    return { token, expiresAt: null };
+  }
+
   // ---------- routes ----------
   const routes = [];
   const route = (method, pattern, handler) => routes.push({ method, pattern, handler });
 
-  route('GET', /^\/api\/health$/, () => ({ ok: true, mode: config.demo ? 'demo' : 'live', apiVersion: meta.version, hosted: !!config.hosted }));
+  route('GET', /^\/api\/health$/, () => ({ ok: true, mode: config.demo ? 'demo' : 'live', apiVersion: meta.version, hosted: !!config.hosted, loginModes: config.loginModes }));
 
   // Sign in with Meta (OAuth code flow; the token never reaches the browser).
   route('GET', /^\/auth\/meta\/start$/, (req, res) => {
+    if (!config.loginModes.includes('oauth')) throw new HttpError(404, 'Facebook Login is switched off. Paste an access token instead.');
     const state = S.randomId(16);
     const u = new URL(`${meta.dialogUrl}/${meta.version}/dialog/oauth`);
     u.searchParams.set('client_id', meta.appId);
@@ -230,20 +260,8 @@ async function createApp(config, { sleep, log = console } = {}) {
     try {
       const g = new GraphClient({ token: '', version: meta.version, baseUrl: meta.graphUrl, sleep });
       const short = await g.getNoAuth('oauth/access_token', { client_id: meta.appId, client_secret: meta.appSecret, redirect_uri: `${config.baseUrl}/auth/meta/callback`, code: url.searchParams.get('code') });
-      const longTok = await g.getNoAuth('oauth/access_token', { grant_type: 'fb_exchange_token', client_id: meta.appId, client_secret: meta.appSecret, fb_exchange_token: short.access_token });
-      const token = longTok.access_token || short.access_token;
-      const expiresAt = Date.now() + (Number(longTok.expires_in || short.expires_in || 3600) * 1000);
-      const me = await client(token).get('me', { fields: 'id,name' });
-      const now = Date.now();
-      await db.run(`INSERT INTO users (id, name, token_enc, token_expires_at, token_status, created_at, last_login_at) VALUES (?, ?, ?, ?, 'ok', ?, ?)
-        ON CONFLICT(id) DO UPDATE SET name = excluded.name, token_enc = excluded.token_enc, token_expires_at = excluded.token_expires_at, token_status = 'ok', last_login_at = excluded.last_login_at`,
-      me.id, me.name, S.encrypt(token, config.key), expiresAt, now, now);
-      // Remember the ad accounts this person can see.
-      await upsertAccounts(me.id, await client(token).all('me/adaccounts', { fields: 'id,name,currency,timezone_name,account_status', limit: 100 }));
-      await db.run(`UPDATE ad_accounts SET sync_state = CASE WHEN sync_state = 'reconnect' THEN 'ok' ELSE sync_state END WHERE user_id = ?`, me.id);
-      const sid = S.randomId(32);
-      await db.run('INSERT INTO sessions (id, user_id, csrf, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', sid, me.id, S.randomId(24), now, now + SESSION_DAYS * DAY);
-      await track(me.id, 'login');
+      const lt = await longLived(short.access_token);
+      const sid = await signInWithToken(lt.token, lt.expiresAt || Date.now() + Number(short.expires_in || 3600) * 1000);
       res.writeHead(302, {
         location: '/#connected',
         'set-cookie': [S.cookie(SID, sid, { maxAge: SESSION_DAYS * 86400, secure }), S.cookie(OAUTH, '', { maxAge: 0, secure })],
@@ -254,6 +272,34 @@ async function createApp(config, { sleep, log = console } = {}) {
       log.warn?.('oauth failed: ' + e.message);
       fail();
     }
+  });
+
+  // Sign in by pasting a token from the Meta app's Marketing API → Tools page.
+  // Needs no Facebook Login product, App Review or Business Verification.
+  route('POST', /^\/auth\/meta\/token$/, async (req, res) => {
+    if (!config.loginModes.includes('token')) throw new HttpError(404, 'Not found');
+    // Login CSRF guard: same-origin JSON only (a cross-site form can't send this content type).
+    const origin = req.headers.origin;
+    const host = req.headers.host;
+    if (origin && origin !== config.baseUrl && origin !== `http://${host}` && origin !== `https://${host}`) throw new HttpError(403, 'Cross-site request blocked.');
+    if (!(req.headers['content-type'] || '').includes('application/json')) throw new HttpError(415, 'Send JSON.');
+    const b = await readBody(req);
+    const pasted = String(b.token || '').trim();
+    if (!/^[A-Za-z0-9|_\-.]{10,1000}$/.test(pasted)) throw new HttpError(400, 'That doesn\'t look like an access token. Copy the whole token from Marketing API → Tools.');
+    let perms;
+    try {
+      // appsecret_proof is added to this call, so a token from any other app is refused by Meta.
+      perms = await client(pasted).all('me/permissions', {});
+    } catch (e) {
+      if (e instanceof MetaError && e.kind === 'auth') throw new HttpError(400, 'Meta rejected this token. It may have expired or belong to a different app. Generate a new one.');
+      if (e instanceof MetaError && e.code === 100) throw new HttpError(400, 'This token belongs to a different Meta app. Generate it from this app\'s Marketing API → Tools page.');
+      throw e;
+    }
+    const granted = new Set(perms.filter((p) => p.status === 'granted').map((p) => p.permission));
+    if (!granted.has('ads_read') && !granted.has('ads_management')) throw new HttpError(400, 'This token doesn\'t include ads_read. Tick ads_read before clicking Get Token.');
+    const lt = await longLived(pasted);
+    const sid = await signInWithToken(lt.token, lt.expiresAt);
+    send(res, 200, { ok: true }, { 'set-cookie': S.cookie(SID, sid, { maxAge: SESSION_DAYS * 86400, secure }) });
   });
 
   route('POST', /^\/auth\/logout$/, async (req, res) => {

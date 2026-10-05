@@ -28,13 +28,29 @@ You need **Node 22.13 or newer** and no npm packages.
 
 ```bash
 npm start      # builds the page and starts the server at http://localhost:8787
-npm test       # 53 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
+npm test       # 56 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
 ```
 
-- Without a `.env`, the server runs in **demo mode**: "Continue with Facebook" connects to a simulated ad account, so you can try every feature without a Meta app.
-- To use a real ad account, follow [SETUP-META.md](SETUP-META.md).
+- Without a `.env`, the server runs in **demo mode** with a simulated ad account. Paste `demo-short-token` into the token box (or use "Continue with Facebook") to try every feature without a Meta app.
 - No server? Open `dist/index.html` directly. File import, analysis, charts and downloads all work offline; only the Meta connection needs the server.
-- **Host it on Vercel** (free Hobby plan) with a Turso database: [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md). Locally there are no npm dependencies; hosted, `@libsql/client` is the only one.
+
+## Connect a real Meta ad account
+1. Create a Meta app (type **Business**) at developers.facebook.com and add the **Marketing API** product. No Facebook Login, App Review or Business Verification is needed for your own ad accounts.
+2. Copy `.env.example` to `.env` and set `META_APP_ID` and `META_APP_SECRET` (App settings → Basic).
+3. `npm start`, then in the Meta app go to **Marketing API → Tools**, tick **ads_read** only, click **Get Token**, and paste the token into the analyser's **Paste your access token** box.
+
+The server checks the token belongs to your app and includes `ads_read`, swaps it for a 60-day token and stores it encrypted. Only paste tokens into the app itself; treat them like passwords.
+
+Facebook Login is also built in (`META_LOGIN_MODE=token,oauth`), for when the app has Advanced Access and Business Verification.
+
+## Host it on Vercel
+The free Hobby plan works with a Turso database (also free):
+1. Import the repository in Vercel (framework preset **Other**; `vercel.json` sets the rest).
+2. Add a Turso database from the Vercel Marketplace, connected to the project.
+3. Set `META_APP_ID`, `META_APP_SECRET`, `APP_SECRET_KEY` (32 random bytes, base64), `CRON_SECRET` and `BASE_URL` (`https://<project>.vercel.app`).
+4. Deploy and open `/api/health`.
+
+Hobby is for non-commercial use. Locally there are no npm dependencies; hosted, `@libsql/client` is the only one.
 
 ## How it fits together
 
@@ -43,7 +59,7 @@ Browser (dist/index.html)            Node server (server/)                    Me
   src/core.js   analysis engine   <-- /api/accounts/:id/entities <-- SQLite <-- sync.js <-- Marketing API v25
   src/charts.js SVG charts            /api/entities/:id/manual                     (daily, plus "Sync now")
   src/app.js    UI                    /api/comparisons, /api/shares, /r/:token
-                                      /auth/meta/*  (OAuth code flow)
+                                      /auth/meta/token  (pasted token; or OAuth)
                                       /meta/deauthorize, /meta/data-deletion
 ```
 
@@ -61,11 +77,10 @@ Browser (dist/index.html)            Node server (server/)                    Me
 | `api/index.js`, `vercel.json` | Vercel entry point: one function serves everything; daily cron at 00:30 UTC. |
 | `mock/meta-mock.js` | A simulated Marketing API: same endpoints and shapes, made-up data, optional rate-limit errors. |
 | `tests/` | Engine, charts, Meta mapping and client, and end-to-end server tests. |
-| `GUIDE.md`, `SETUP-META.md`, `ROADMAP.md` | Usage guide, Meta setup, product roadmap. |
 
 ## Security and privacy
 - **Read-only:** the app asks Meta only for `ads_read`.
-- **Tokens stay on the server.** The OAuth code exchange happens server-side. The long-lived token is encrypted at rest with AES-256-GCM, and every Graph call carries an `appsecret_proof`.
+- **Tokens stay on the server.** A pasted token is checked against the app (via `appsecret_proof`) and its permissions, then swapped for a long-lived one server-side; the browser never sees it again. The long-lived token is encrypted at rest with AES-256-GCM, and every Graph call carries an `appsecret_proof`.
 - **Sessions:**
   - HttpOnly, SameSite=Lax cookies
   - a CSRF token plus an origin check on every write
@@ -84,7 +99,7 @@ Browser (dist/index.html)            Node server (server/)                    Me
 - **Usage counters, no billing.** Syncs, API calls, share links and saved comparisons are counted, so plan limits are possible later.
 
 ## What's next
-See [ROADMAP.md](ROADMAP.md). Phase 2 is:
+Phase 2:
 - creative fatigue and pacing alerts
 - scheduled email reports
 - AI-written explanations grounded in the computed numbers

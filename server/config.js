@@ -75,6 +75,9 @@ function loadConfig(overrides = {}) {
       dialogUrl: env.META_DIALOG_URL || 'https://www.facebook.com',
       backfillDays: Number(env.SYNC_BACKFILL_DAYS || 90),
     },
+    // How people connect Meta: 'token' (paste an access token), 'oauth' (Facebook Login), or both.
+    // Facebook Login for Business needs Business Verification, so token is the default.
+    loginModes: demo ? ['oauth', 'token'] : String(env.META_LOGIN_MODE || 'token').split(/[ ,]+/).filter((m) => ['token', 'oauth'].includes(m)),
     syncEveryHours: Number(env.SYNC_EVERY_HOURS || 24),
     // Longest a single sync step may run. Vercel's free plan stops functions at 300 s.
     syncStepMs: Number(env.SYNC_STEP_SECONDS || 240) * 1000,

@@ -15,6 +15,7 @@ const DEMO = {
   shortToken: 'demo-short-token',
   longToken: 'demo-long-token',
   accountId: 'act_1000000001',
+  noAdsToken: 'demo-token-without-ads-read',
 };
 
 // ---------- deterministic randomness ----------
@@ -242,7 +243,7 @@ function startMetaMock({ port = 0, failEvery = 0, version = 'v25.0' } = {}) {
 
     stats.calls++;
     const token = q.get('access_token');
-    if (token !== DEMO.longToken && token !== DEMO.shortToken) return send(400, { error: { message: 'Invalid OAuth access token.', type: 'OAuthException', code: 190 } });
+    if (token !== DEMO.longToken && token !== DEMO.shortToken && token !== DEMO.noAdsToken) return send(400, { error: { message: 'Invalid OAuth access token.', type: 'OAuthException', code: 190 } });
     const proof = q.get('appsecret_proof');
     if (proof && proof !== crypto.createHmac('sha256', DEMO.appSecret).update(token).digest('hex')) return send(400, { error: { message: 'Invalid appsecret_proof provided in the API argument', code: 100 } });
     const usage = { 'x-business-use-case-usage': JSON.stringify({ [DEMO.accountId.slice(4)]: [{ type: 'ads_insights', call_count: Math.min(99, stats.calls % 100), total_cputime: 5, total_time: 5, estimated_time_to_regain_access: 0 }] }) };
@@ -253,7 +254,7 @@ function startMetaMock({ port = 0, failEvery = 0, version = 'v25.0' } = {}) {
     const fields = (q.get('fields') || '').split(',').filter(Boolean);
 
     if (path === 'me') return send(200, { id: DEMO.userId, name: DEMO.userName }, usage);
-    if (path === 'me/permissions') return send(200, { data: [{ permission: 'ads_read', status: 'granted' }, { permission: 'public_profile', status: 'granted' }] }, usage);
+    if (path === 'me/permissions') return send(200, { data: token === DEMO.noAdsToken ? [{ permission: 'public_profile', status: 'granted' }] : [{ permission: 'ads_read', status: 'granted' }, { permission: 'public_profile', status: 'granted' }] }, usage);
     if (path === 'me/adaccounts') return send(200, page(req, base, [{ id: DEMO.accountId, account_id: DEMO.accountId.slice(4), name: 'Demo ad account (simulated)', currency: 'INR', timezone_name: 'Asia/Kolkata', account_status: 1 }], q), usage);
     if (path === DEMO.accountId) return send(200, { id: DEMO.accountId, name: 'Demo ad account (simulated)', currency: 'INR', timezone_name: 'Asia/Kolkata', account_status: 1 }, usage);
     if (path === `${DEMO.accountId}/campaigns`) return send(200, page(req, base, acc.campaigns.map((c) => pick({ ...c, effective_status: c.status }, fields)), q), usage);

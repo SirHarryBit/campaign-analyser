@@ -262,6 +262,13 @@ legend { font: 600 13px var(--f-body); padding: 0 6px; color: var(--ink-2); text
 .connect-card h2 { font-size: 20px; margin: 0; }
 .connect-card p { margin: 0; }
 .btn.fb { background: #1877f2; border-color: #1877f2; color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.token-form { display: grid; gap: 8px; margin-top: 6px; max-width: 34rem; }
+.token-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.token-row input { flex: 1 1 14rem; min-width: 0; font: 14px var(--f-mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.token-help summary { cursor: pointer; font-size: 13.5px; color: var(--accent); width: max-content; }
+.token-help ol { margin: 6px 0 0; padding-left: 20px; font-size: 13.5px; display: grid; gap: 4px; }
+.token-status { margin: 0; font-size: 13.5px; color: var(--ink-2); min-height: 1em; }
+.token-status.err { color: var(--bad); }
 .demo-note { font-size: 13.5px; background: var(--warn-soft); padding: 6px 10px; border-radius: 8px; }
 .meta-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .meta-bar > * { min-width: 0; }
@@ -364,7 +371,7 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
       </nav>
       <article>
         <section id="g-connect"><h2>Connecting Meta</h2>
-          <p>When the app runs on its server (<code>npm start</code>), choose <b>Meta ads → Continue with Facebook</b>. Access is read-only: nothing in your ad account can be changed.</p>
+          <p>When the app runs on its server (<code>npm start</code>), choose <b>Meta ads</b> and paste an access token from your Meta app (<b>Marketing API → Tools</b>, tick <code>ads_read</code> only, <b>Get Token</b>). Paste it only here, never into a chat or email. Access is read-only: nothing in your ad account can be changed.</p>
           <ol>
             <li><b>Pick the ad account.</b> The first sync pulls the last 90 days. <b>Auto-sync daily</b> keeps it fresh; switch it off to sync only when you press <b>Sync now</b>.</li>
             <li><b>Choose dates and level</b>: campaigns, ad sets or ads. The list shows everything that spent money in that period, biggest first, and ticks the top three with the same objective.</li>
@@ -2493,6 +2500,52 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
     return `<span class="sync-status" role="status">Synced ${ago(acct.lastSyncedAt)}${acct.syncedUntil ? ` · data to ${fmtDay(acct.syncedUntil)}` : ''}${extra}</span>`;
   }
 
+  function connectCardHtml() {
+    const modes = (state.server && state.server.loginModes) || ['oauth'];
+    const demo = state.server && state.server.mode === 'demo';
+    const reconnect = !!state.meta.me;
+    const oauth = modes.includes('oauth') ? `<a class="btn fb" href="/auth/meta/start">Continue with Facebook</a>` : '';
+    const token = modes.includes('token') ? `
+      <form class="token-form" id="token-form" autocomplete="off">
+        <label for="token-input"><b>${reconnect ? 'Paste a new access token' : 'Paste your access token'}</b></label>
+        <div class="token-row"><input id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="EAA…" required><button class="btn" type="submit">Connect</button></div>
+        <details class="token-help"><summary>How do I get a token?</summary>
+          <ol>
+            <li>Open your app on developers.facebook.com → <b>Marketing API</b> → <b>Tools</b>.</li>
+            <li>Tick <b>ads_read</b> only, then click <b>Get Token</b> and copy it.</li>
+            <li>Paste it here. It's checked against your app, swapped for a 60-day token and stored encrypted. Don't share it anywhere else.</li>
+          </ol>
+          ${demo ? '<p class="muted">Demo mode: paste <code>demo-short-token</code> to try it.</p>' : ''}
+        </details>
+        <p class="token-status" id="token-status" role="status"></p>
+      </form>` : '';
+    return `<div class="connect-card"><div><h2>${reconnect ? 'Reconnect Meta' : 'Connect your Meta ad account'}</h2>
+      <p class="muted">Read-only access (<code>ads_read</code>): campaigns, ad sets, ads and daily results sync into the app. Nothing in your ad account is ever changed.</p>
+      ${demo ? '<p class="demo-note">Demo mode: this connects to a <b>simulated</b> ad account with made-up data.</p>' : ''}
+      ${token}</div>${oauth}${reconnect ? '<button class="btn ghost small" data-act="hide-connect">Cancel</button>' : ''}</div>`;
+  }
+
+  async function connectWithToken(e) {
+    e.preventDefault();
+    const input = $('#token-input');
+    const status = $('#token-status');
+    const token = input.value.trim();
+    if (!token) return;
+    status.textContent = 'Checking the token with Meta…';
+    status.classList.remove('err');
+    try {
+      const res = await fetch('/auth/meta/token', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ token }), credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      input.value = '';
+      if (!res.ok) throw new Error(data.error || 'Could not connect.');
+      location.replace('/#connected');
+      location.reload();
+    } catch (err) {
+      status.textContent = err.message;
+      status.classList.add('err');
+    }
+  }
+
   function renderSource() {
     const host = $('#source-bar');
     if (!host) return;
@@ -2503,17 +2556,15 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
     if (state.source === 'meta') {
       const me = state.meta.me;
       const err = state.meta.error ? `<p class="notices" role="alert" style="padding-left:14px">${esc(state.meta.error)}</p>` : '';
-      if (!me) {
-        html += `<div class="connect-card"><div><h2>Connect your Meta ad account</h2>
-          <p class="muted">Read-only access (<code>ads_read</code>): campaigns, ad sets, ads and daily results sync automatically once a day. Nothing in your ad account is ever changed.</p>
-          ${state.server.mode === 'demo' ? '<p class="demo-note">Demo mode: this connects to a <b>simulated</b> ad account with made-up data. Add your Meta app ID to <code>.env</code> to use a real one.</p>' : ''}</div>
-          <a class="btn fb" href="/auth/meta/start">Continue with Facebook</a></div>${err}`;
-      } else {
+      if (!me || state.meta.showConnect) {
+        html += connectCardHtml() + err;
+      }
+      if (me) {
         const acct = currentAccount();
         const conn = me.connection || {};
         let warn = '';
-        if (conn.status === 'reconnect') warn = `<p class="notices" role="alert" style="padding-left:14px">Your Meta connection has expired or was removed. <a href="/auth/meta/start">Reconnect</a> to keep syncing.</p>`;
-        else if (conn.daysLeft !== null && conn.daysLeft <= 7) warn = `<p class="notices" style="padding-left:14px">Meta connections last 60 days. Yours ends in ${Math.max(0, conn.daysLeft)} day${conn.daysLeft === 1 ? '' : 's'}: <a href="/auth/meta/start">reconnect now</a> to avoid a gap.</p>`;
+        if (conn.status === 'reconnect') warn = `<p class="notices" role="alert" style="padding-left:14px">Your Meta connection has expired or was removed. <button class="linkish" data-act="show-connect">Reconnect</button> to keep syncing.</p>`;
+        else if (conn.daysLeft !== null && conn.daysLeft <= 7) warn = `<p class="notices" style="padding-left:14px">Meta connections last 60 days. Yours ends in ${Math.max(0, conn.daysLeft)} day${conn.daysLeft === 1 ? '' : 's'}: <button class="linkish" data-act="show-connect">reconnect now</button> to avoid a gap.</p>`;
         if (!state.meta.accounts.length) {
           html += `<div class="connect-card"><div><h2>No ad accounts found</h2><p class="muted">Signed in as ${esc(me.name)}, but this Facebook profile can't see any ad accounts. Ask the account owner to add you in Business Settings, then try again.</p></div><button class="btn" data-act="refresh-accounts">Check again</button></div>`;
         } else {
@@ -2579,6 +2630,8 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
   async function handleMetaAction(t) {
     const act = t.dataset.act;
     if (act === 'sync') return startMetaSync();
+    if (act === 'show-connect') { state.meta.showConnect = true; renderSource(); const i = $('#token-input'); if (i) i.focus(); return; }
+    if (act === 'hide-connect') { state.meta.showConnect = false; renderSource(); return; }
     if (act === 'refresh-accounts') { await api('POST', '/api/accounts/refresh', {}).then((d) => { state.meta.accounts = d.accounts; }).catch((e) => { state.meta.error = e.message; }); return render(); }
     if (act === 'logout') { await api('POST', '/auth/logout', {}).catch(() => {}); state.meta = { ...state.meta, me: null, accounts: [], items: null, comparisons: [] }; state.campaigns = []; state.selected.clear(); return render(); }
     if (act === 'delete-me') { $('#confirm-delete-me').hidden = false; return; }
@@ -2692,7 +2745,7 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
     dz.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
     $('#editor-form').addEventListener('submit', saveEditor);
     $('#settings-form').addEventListener('submit', saveSettings);
-    document.addEventListener('submit', (e) => { if (e.target.id === 'save-cmp-row') saveComparison(e); });
+    document.addEventListener('submit', (e) => { if (e.target.id === 'save-cmp-row') saveComparison(e); if (e.target.id === 'token-form') connectWithToken(e); });
     if (location.hash === '#guide' || location.hash === '#compare') state.tab = location.hash.slice(1);
 
     // Chart tooltips: one shared box, shown on hover and on keyboard focus.

@@ -325,3 +325,45 @@ test('the Vercel entry point serves the app', async () => {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp folder; the OS clears it */ }
   }
 });
+
+dtest('sign in by pasting an access token', async () => {
+  const t = await setup();
+  try {
+    const post = (body, extra = {}) => t.call('POST', '/auth/meta/token', { body, ...extra });
+    // Wrong content type and cross-site requests are refused.
+    const form = await fetch(t.config.baseUrl + '/auth/meta/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'token=demo-short-token' });
+    assert.strictEqual(form.status, 415);
+    const cross = await fetch(t.config.baseUrl + '/auth/meta/token', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: JSON.stringify({ token: 'demo-short-token' }) });
+    assert.strictEqual(cross.status, 403);
+    // Junk, unknown and under-permissioned tokens are refused with a clear reason.
+    assert.strictEqual((await post({ token: 'x' })).status, 400);
+    const bad = await post({ token: 'not-a-real-token-1234' });
+    assert.strictEqual(bad.status, 400);
+    assert.match(bad.body.error, /rejected/);
+    const noAds = await post({ token: 'demo-token-without-ads-read' });
+    assert.strictEqual(noAds.status, 400);
+    assert.match(noAds.body.error, /ads_read/);
+    assert.strictEqual((await t.call('GET', '/api/me')).status, 401);
+    // A good token signs in, is swapped for a 60-day one and lists the ad accounts.
+    const ok = await post({ token: ' demo-short-token ' });
+    assert.strictEqual(ok.status, 200);
+    const me = await t.call('GET', '/api/me');
+    assert.strictEqual(me.status, 200);
+    assert.ok(me.body.connection.daysLeft >= 58);
+    const accounts = await t.call('GET', '/api/accounts');
+    assert.ok(accounts.body.accounts.length > 0);
+    // The token is stored encrypted, never in plain text.
+    const row = await t.app.db.get('SELECT token_enc FROM users WHERE id = ?', me.body.id);
+    assert.ok(!String(row.token_enc).includes('demo-long-token'));
+  } finally { await t.done(); }
+});
+
+test('token sign-in can be switched off; Facebook Login is off by default when hosted', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ca-cfg-'));
+  try {
+    const base = { META_APP_ID: '1', META_APP_SECRET: 's', DATA_DIR: dir, DEMO: '0' };
+    assert.deepStrictEqual(loadConfig(base).loginModes, ['token']);
+    assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'token,oauth' }).loginModes, ['token', 'oauth']);
+    assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'oauth' }).loginModes, ['oauth']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
