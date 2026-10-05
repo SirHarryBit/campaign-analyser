@@ -367,3 +367,55 @@ test('token sign-in can be switched off; Facebook Login is off by default when h
     assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'oauth' }).loginModes, ['oauth']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+dtest('a step that runs out of time mid-chunk resumes without losing or doubling data', async () => {
+  const { syncStep } = require('../server/meta/sync.js');
+  const { GraphClient } = require('../server/meta/client.js');
+  const t = await setup();
+  try {
+    const me = await t.signIn();
+    const id = (await t.call('GET', '/api/accounts')).body.accounts[0].id;
+    const db = t.app.db;
+    const fresh = () => new GraphClient({ token: DEMO.longToken, appSecret: DEMO.appSecret, baseUrl: t.mock.url, sleep: async () => {} });
+    // Step 1: the structure plus the first chunk; the host's time limit hits during the second chunk.
+    const c = fresh();
+    let insightCalls = 0;
+    const real = c.request.bind(c);
+    c.request = async (url) => {
+      if (url.includes('/insights') && ++insightCalls === 2) { c.deadline = Date.now() - 1; c.checkTime(); }
+      return real(url);
+    };
+    const r1 = await syncStep({ db, userId: me.id, accountId: id, client: c });
+    assert.strictEqual(r1.done, false);
+    const cursor = (await db.get('SELECT sync_cursor FROM ad_accounts WHERE id = ?', id)).sync_cursor;
+    assert.strictEqual(r1.cursor, cursor, 'cursor stays at the start of the unfinished chunk');
+    // Finish with a normal client, then compare with a clean full sync.
+    let r; do { r = await syncStep({ db, userId: me.id, accountId: id, client: fresh() }); } while (!r.done);
+    const n1 = (await db.get('SELECT COUNT(*) AS n, SUM(spend) AS s FROM daily WHERE account_id = ?', id));
+    await db.run('DELETE FROM daily WHERE account_id = ?', id);
+    await db.run('UPDATE ad_accounts SET sync_cursor = NULL, synced_until = NULL WHERE id = ?', id);
+    do { r = await syncStep({ db, userId: me.id, accountId: id, client: fresh() }); } while (!r.done);
+    const n2 = (await db.get('SELECT COUNT(*) AS n, SUM(spend) AS s FROM daily WHERE account_id = ?', id));
+    assert.ok(Number(n1.n) > 0);
+    assert.deepStrictEqual([Number(n1.n), Number(n1.s)], [Number(n2.n), Number(n2.s)]);
+  } finally { await t.done(); }
+});
+
+dtest('a sync step the host killed is reported as resumable and finishes', async () => {
+  const t = await setup();
+  try {
+    const me = await t.signIn();
+    const id = (await t.call('GET', '/api/accounts')).body.accounts[0].id;
+    // Simulate Vercel stopping the function mid-step: the row is left 'running'.
+    await t.app.db.run(`UPDATE ad_accounts SET sync_state = 'running', sync_progress = 'Fetching daily results', sync_started_at = ? WHERE id = ?`, Date.now() - 400000, id);
+    const a = (await t.call('GET', `/api/accounts/${id}`)).body.account;
+    assert.strictEqual(a.syncState, 'partial');
+    // A recent 'running' is left alone (another step may really be running).
+    await t.app.db.run('UPDATE ad_accounts SET sync_started_at = ? WHERE id = ?', Date.now() - 1000, id);
+    assert.strictEqual((await t.call('GET', `/api/accounts/${id}`)).body.account.syncState, 'running');
+    await t.app.db.run('UPDATE ad_accounts SET sync_started_at = ? WHERE id = ?', Date.now() - 400000, id);
+    let b, steps = 0;
+    do { b = (await t.call('POST', `/api/accounts/${id}/sync`, { body: {}, csrf: me.csrf })).body.account; } while (b.syncState === 'partial' && ++steps < 20);
+    assert.strictEqual(b.syncState, 'ok');
+  } finally { await t.done(); }
+});

@@ -17,7 +17,8 @@ const { cleanSnapshot } = require('./snapshot.js');
 const SESSION_DAYS = 30;
 const JSON_LIMIT = 2 * 1024 * 1024;
 const DAY = 86400000;
-const LEASE_MS = 330000; // a sync step that hasn't finished in this long has died
+const LEASE_MS = 310000; // a sync step that hasn't finished in this long has died (Vercel stops functions at 300 s)
+const HARD_STOP_MS = 40000; // after the step budget, in-flight Meta calls get this long before the step ends itself
 
 class HttpError extends Error {
   constructor(status, message, extra = {}) { super(message); this.status = status; this.extra = extra; }
@@ -91,7 +92,10 @@ async function createApp(config, { sleep, log = console } = {}) {
   const publicAccount = (a) => ({
     id: a.id, name: a.name, currency: a.currency, timezone: a.timezone, selected: !!a.selected,
     autoSync: a.auto_sync === null || a.auto_sync === undefined ? true : !!a.auto_sync,
-    syncState: a.sync_state, syncError: a.sync_error, syncProgress: a.sync_progress,
+    // A step that died (host time limit, crash) leaves 'running' behind; report it as resumable.
+    ...(a.sync_state === 'running' && a.sync_started_at && a.sync_started_at < Date.now() - LEASE_MS
+      ? { syncState: 'partial', syncError: null, syncProgress: 'Interrupted; continuing' }
+      : { syncState: a.sync_state, syncError: a.sync_error, syncProgress: a.sync_progress }),
     lastSyncedAt: a.last_synced_at, syncedUntil: a.synced_until, nextAttemptAt: a.next_attempt_at,
   });
   async function upsertAccounts(userId, accts) {
@@ -113,6 +117,7 @@ async function createApp(config, { sleep, log = console } = {}) {
     if (!got.changes) return account(userId, accountId); // already running elsewhere
     try {
       const c = client(await userToken(userId));
+      c.deadline = now + Math.min(budgetMs + HARD_STOP_MS, config.hosted ? 285000 : Infinity);
       const r = await syncStep({
         db, userId, accountId, client: c, backfillDays: meta.backfillDays, deadline: now + budgetMs,
         progress: (msg) => db.run('UPDATE ad_accounts SET sync_progress = ? WHERE user_id = ? AND id = ?', msg, userId, accountId),
@@ -123,7 +128,7 @@ async function createApp(config, { sleep, log = console } = {}) {
         await track(userId, 'sync');
         log.info?.(`sync ok ${accountId}: ${r.rows} daily rows, ${r.apiCalls} calls`);
       } else {
-        await db.run(`UPDATE ad_accounts SET sync_state = 'partial', sync_progress = ? WHERE user_id = ? AND id = ?`, `Continuing from ${r.cursor}`, userId, accountId);
+        await db.run(`UPDATE ad_accounts SET sync_state = 'partial', sync_progress = ? WHERE user_id = ? AND id = ?`, r.cursor ? `Continuing from ${r.cursor}` : 'Continuing', userId, accountId);
       }
     } catch (e) {
       const kind = e instanceof MetaError ? e.kind : e.extra?.reconnect ? 'auth' : 'other';

@@ -90,6 +90,9 @@ class GraphClient {
     this.maxRetries = maxRetries;
     this.maxWaitMs = maxWaitMs;
     this.timeoutMs = timeoutMs;
+    // Absolute time (ms) after which no new request or wait may start. Serverless hosts stop the
+    // function at a fixed limit, so a sync step must end cleanly before that instead of being killed.
+    this.deadline = Infinity;
     this.calls = 0;
     this.lastUsagePct = 0;
   }
@@ -114,19 +117,31 @@ class GraphClient {
     return this.request(this.url(path, params, { auth: false }));
   }
 
+  /** Throws a 'deadline' error if waiting `ms` more would run past the deadline. */
+  checkTime(ms = 0) {
+    if (Date.now() + ms > this.deadline) throw new MetaError('Out of time for this step; the sync continues in the next one.', { kind: 'deadline' });
+  }
+
+  async wait(ms) {
+    this.checkTime(ms);
+    await this.sleep(ms);
+  }
+
   async request(url) {
     let attempt = 0;
     for (;;) {
       // Slow down before Meta makes us stop.
-      if (this.lastUsagePct >= 90) await this.sleep(10000);
-      else if (this.lastUsagePct >= 75) await this.sleep(2000);
+      if (this.lastUsagePct >= 90) await this.wait(10000);
+      else if (this.lastUsagePct >= 75) await this.wait(2000);
+      this.checkTime(5000); // not worth starting a request with less than 5 s left
+      const timeout = Math.max(1000, Math.min(this.timeoutMs, this.deadline - Date.now()));
       let res, body;
       try {
         this.calls++;
-        res = await this.fetch(url, { signal: AbortSignal.timeout(this.timeoutMs), headers: { accept: 'application/json' } });
+        res = await this.fetch(url, { signal: AbortSignal.timeout(timeout), headers: { accept: 'application/json' } });
         body = await res.json().catch(() => ({}));
       } catch (e) {
-        if (attempt++ < this.maxRetries) { await this.sleep(this.backoff(attempt)); continue; }
+        if (attempt++ < this.maxRetries) { await this.wait(this.backoff(attempt)); continue; }
         throw new MetaError(`Could not reach Meta: ${e.message}`, { kind: 'transient' });
       }
       this.lastUsagePct = usagePctFromHeaders(res.headers);
@@ -140,10 +155,10 @@ class GraphClient {
         const wait = regain || this.backoff(attempt + 2);
         if (wait > this.maxWaitMs || attempt >= this.maxRetries) throw new MetaError(err.message || 'Meta rate limit reached', { ...meta, retryAfterMs: wait || 60000 });
         attempt++;
-        await this.sleep(wait);
+        await this.wait(wait);
         continue;
       }
-      if (kind === 'transient' && attempt < this.maxRetries) { attempt++; await this.sleep(this.backoff(attempt)); continue; }
+      if (kind === 'transient' && attempt < this.maxRetries) { attempt++; await this.wait(this.backoff(attempt)); continue; }
       throw new MetaError(err.message || 'Meta API error', meta);
     }
   }

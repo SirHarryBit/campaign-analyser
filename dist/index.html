@@ -2461,7 +2461,9 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
         if (acct.syncState !== 'partial') break;
       }
     } catch (e) {
-      state.meta.error = e.message;
+      // 502–504: the host cut the step off. The server marks it resumable, so keep polling quietly.
+      if (e.status >= 502 && e.status <= 504) acct.syncState = 'running';
+      else state.meta.error = e.message;
       if (e.data && e.data.reconnect && state.meta.me) state.meta.me.connection.status = 'reconnect';
     } finally {
       clearInterval(poll);

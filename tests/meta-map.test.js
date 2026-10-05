@@ -114,3 +114,20 @@ test('regain time is read from usage headers', () => {
   const h = new Map([['x-ad-account-usage', JSON.stringify({ acc_id_util_pct: 99, reset_time_duration: 2 })]]);
   assert.strictEqual(regainMsFromHeaders(h), 120000);
 });
+
+test('client: stops before a wait or request would run past its deadline', async () => {
+  const limited = async () => new Response(JSON.stringify({ error: { message: 'User request limit reached', code: 17 } }), {
+    status: 400, headers: { 'x-business-use-case-usage': JSON.stringify({ 1: [{ estimated_time_to_regain_access: 1 }] }) },
+  });
+  const slept = [];
+  const c = new GraphClient({ token: 't', fetchImpl: limited, sleep: async (ms) => { slept.push(ms); } });
+  c.deadline = Date.now() + 10000; // Meta asks for a 60 s wait; only 10 s left
+  await assert.rejects(c.get('act_1/insights'), (e) => e instanceof MetaError && e.kind === 'deadline');
+  assert.deepStrictEqual(slept, []);
+  // With under 5 s left, no new request starts at all.
+  let fetched = 0;
+  const c2 = new GraphClient({ token: 't', fetchImpl: async () => { fetched++; return new Response('{}'); } });
+  c2.deadline = Date.now() + 3000;
+  await assert.rejects(c2.get('me'), (e) => e.kind === 'deadline');
+  assert.strictEqual(fetched, 0);
+});

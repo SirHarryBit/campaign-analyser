@@ -125,9 +125,16 @@ async function syncStep({ db, userId, accountId, client, backfillDays = 90, dead
   let structure = null;
   let timezone = row?.timezone;
 
+  const outOfTime = (e) => e && e.kind === 'deadline';
   // Fresh sync: refresh the structure first, then decide which days to fetch.
   if (!cursor) {
-    structure = await syncStructure({ db, userId, accountId, client, progress, deadline });
+    try {
+      structure = await syncStructure({ db, userId, accountId, client, progress, deadline });
+    } catch (e) {
+      // Ran out of time: start again next step (audience sizes already fetched are kept).
+      if (outOfTime(e)) return { done: false, cursor: null, rows: 0, apiCalls: client.calls - startedCalls };
+      throw e;
+    }
     timezone = structure.timezone;
     const today = todayIn(timezone, now);
     cursor = row?.synced_until ? addDays(row.synced_until, -RESETTLE_DAYS) : addDays(today, -(backfillDays - 1));
@@ -139,19 +146,25 @@ async function syncStep({ db, userId, accountId, client, backfillDays = 90, dead
   let rowsSaved = 0;
   let didChunk = false;
   for (let i = 0; i < parts.length; i++) {
-    // Always make progress: at least one chunk per step, more while time allows.
-    if (didChunk && Date.now() > deadline) {
+    // Always make progress: the structure or at least one chunk per step, more while time allows.
+    if ((didChunk || structure) && Date.now() > deadline) {
       return { done: false, cursor: parts[i].since, rows: rowsSaved, apiCalls: client.calls - startedCalls, ...structure };
     }
     await progress(`Fetching daily results: ${parts[i].since} to ${parts[i].until}`);
-    await fetchDaily(client, accountId, parts[i], async (rows) => {
-      await db.batch(rows.map((r) => {
-        const m = M.mapInsightRow(r);
-        return [UPSERT_DAILY, userId, accountId, r.ad_id, r.adset_id ?? null, r.campaign_id ?? null, r.date_start, m.spend ?? 0, m.impressions ?? 0, m.reach ?? 0, m.clicks ?? 0,
-          m.landingPageViews ?? null, m.leads ?? null, m.conversions ?? null, m.conversionValue ?? null, m.views ?? null];
-      }));
-      rowsSaved += rows.length;
-    });
+    try {
+      await fetchDaily(client, accountId, parts[i], async (rows) => {
+        await db.batch(rows.map((r) => {
+          const m = M.mapInsightRow(r);
+          return [UPSERT_DAILY, userId, accountId, r.ad_id, r.adset_id ?? null, r.campaign_id ?? null, r.date_start, m.spend ?? 0, m.impressions ?? 0, m.reach ?? 0, m.clicks ?? 0,
+            m.landingPageViews ?? null, m.leads ?? null, m.conversions ?? null, m.conversionValue ?? null, m.views ?? null];
+        }));
+        rowsSaved += rows.length;
+      });
+    } catch (e) {
+      // Out of time mid-chunk: this chunk is fetched again next step (rows are upserted, so no duplicates).
+      if (outOfTime(e)) return { done: false, cursor: parts[i].since, rows: rowsSaved, apiCalls: client.calls - startedCalls, ...structure };
+      throw e;
+    }
     didChunk = true;
     await db.run('UPDATE ad_accounts SET sync_cursor = ? WHERE user_id = ? AND id = ?', addDays(parts[i].until, 1), userId, accountId);
   }
