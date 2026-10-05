@@ -33,6 +33,13 @@ function secretKey(env, dataDir, hosted) {
   return Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'base64');
 }
 
+/** 'token', 'oauth' or both. Forgiving about case, quotes and spaces; never leaves no way to sign in. */
+function loginModes(value) {
+  const modes = [...new Set(String(value || '').toLowerCase().replace(/["']/g, '').split(/[\s,;]+/).filter((m) => m === 'token' || m === 'oauth'))];
+  if (value && !modes.length) console.warn(`META_LOGIN_MODE="${value}" isn't token, oauth or token,oauth; using token.`);
+  return modes.length ? modes : ['token'];
+}
+
 function loadConfig(overrides = {}) {
   loadEnvFile();
   const env = { ...process.env, ...overrides };
@@ -77,7 +84,7 @@ function loadConfig(overrides = {}) {
     },
     // How people connect Meta: 'token' (paste an access token), 'oauth' (Facebook Login), or both.
     // Facebook Login for Business needs Business Verification, so token is the default.
-    loginModes: demo ? ['oauth', 'token'] : String(env.META_LOGIN_MODE || 'token').split(/[ ,]+/).filter((m) => ['token', 'oauth'].includes(m)),
+    loginModes: demo ? ['oauth', 'token'] : loginModes(env.META_LOGIN_MODE),
     syncEveryHours: Number(env.SYNC_EVERY_HOURS || 24),
     // Longest a single sync step may run. Vercel's free plan stops functions at 300 s.
     syncStepMs: Number(env.SYNC_STEP_SECONDS || 240) * 1000,

@@ -365,6 +365,11 @@ test('token sign-in can be switched off; Facebook Login is off by default when h
     assert.deepStrictEqual(loadConfig(base).loginModes, ['token']);
     assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'token,oauth' }).loginModes, ['token', 'oauth']);
     assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'oauth' }).loginModes, ['oauth']);
+    // Typos, quotes and capitals never leave the app with no way to sign in.
+    assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: '"Token"' }).loginModes, ['token']);
+    assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'TOKEN, OAuth' }).loginModes, ['token', 'oauth']);
+    const warn = console.warn; console.warn = () => {};
+    try { assert.deepStrictEqual(loadConfig({ ...base, META_LOGIN_MODE: 'ads_read' }).loginModes, ['token']); } finally { console.warn = warn; }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
