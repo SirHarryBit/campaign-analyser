@@ -43,6 +43,10 @@ function chunks(since, until, days) {
   return out;
 }
 
+// Meta keeps insights for 37 months; 3 years stays safely inside that.
+const MAX_HISTORY_DAYS = 1095;
+const HISTORY_CHOICES = [90, 180, 365, 730, 1095];
+
 async function fetchDaily(client, accountId, range, onRows, depth = 0) {
   try {
     const rows = await client.all(`${accountId}/insights`, { level: 'ad', time_increment: 1, time_range: range, fields: INSIGHT_FIELDS, limit: 500 });
@@ -120,7 +124,8 @@ async function syncStructure({ db, userId, accountId, client, progress, deadline
  */
 async function syncStep({ db, userId, accountId, client, backfillDays = 90, deadline = Infinity, progress = async () => {}, now = new Date() }) {
   const startedCalls = client.calls;
-  const row = await db.get('SELECT sync_cursor, synced_until, timezone FROM ad_accounts WHERE user_id = ? AND id = ?', userId, accountId);
+  const row = await db.get('SELECT sync_cursor, synced_until, synced_from, sync_run_from, history_days, timezone FROM ad_accounts WHERE user_id = ? AND id = ?', userId, accountId);
+  const historyDays = Math.min(MAX_HISTORY_DAYS, row?.history_days || backfillDays);
   let cursor = row?.sync_cursor;
   let structure = null;
   let timezone = row?.timezone;
@@ -137,8 +142,13 @@ async function syncStep({ db, userId, accountId, client, backfillDays = 90, dead
     }
     timezone = structure.timezone;
     const today = todayIn(timezone, now);
-    cursor = row?.synced_until ? addDays(row.synced_until, -RESETTLE_DAYS) : addDays(today, -(backfillDays - 1));
-    await db.run('UPDATE ad_accounts SET sync_cursor = ? WHERE user_id = ? AND id = ?', cursor, userId, accountId);
+    const wantFrom = addDays(today, -(historyDays - 1));
+    // Accounts synced before synced_from existed have the default backfill behind synced_until.
+    const haveFrom = row?.synced_from || (row?.synced_until ? addDays(row.synced_until, -(backfillDays - 1)) : null);
+    if (!row?.synced_until || !haveFrom) cursor = wantFrom;              // first sync
+    else if (wantFrom < haveFrom) cursor = wantFrom;                       // history was extended: fetch the older days too
+    else cursor = addDays(row.synced_until, -RESETTLE_DAYS);               // normal daily top-up
+    await db.run('UPDATE ad_accounts SET sync_cursor = ?, sync_run_from = ? WHERE user_id = ? AND id = ?', cursor, cursor, userId, accountId);
   }
 
   const today = todayIn(timezone, now);
@@ -172,7 +182,10 @@ async function syncStep({ db, userId, accountId, client, backfillDays = 90, dead
   // Finished: range totals depend on the daily data, so cached reach is now out of date.
   const since = cursor;
   await db.run('DELETE FROM totals_cache WHERE user_id = ? AND account_id = ?', userId, accountId);
-  await db.run(`UPDATE ad_accounts SET sync_cursor = NULL, synced_until = ?, last_synced_at = ? WHERE user_id = ? AND id = ?`, today, Date.now(), userId, accountId);
+  const runFrom = row?.sync_run_from || cursor;
+  const haveFrom = row?.synced_from || (row?.synced_until ? addDays(row.synced_until, -(backfillDays - 1)) : runFrom);
+  const syncedFrom = runFrom < haveFrom ? runFrom : haveFrom;
+  await db.run(`UPDATE ad_accounts SET sync_cursor = NULL, sync_run_from = NULL, synced_until = ?, synced_from = ?, last_synced_at = ? WHERE user_id = ? AND id = ?`, today, syncedFrom, Date.now(), userId, accountId);
   return {
     done: true, rows: rowsSaved, since, until: today, apiCalls: client.calls - startedCalls,
     note: structure && structure.estimateErrors ? `Audience size unavailable for ${structure.estimateErrors} ad set(s); you can type it in.` : null,
@@ -187,4 +200,4 @@ async function syncAccount(o) {
   return r;
 }
 
-module.exports = { syncStep, syncAccount, todayIn, chunks, addDays, INSIGHT_FIELDS };
+module.exports = { syncStep, syncAccount, todayIn, chunks, addDays, INSIGHT_FIELDS, MAX_HISTORY_DAYS, HISTORY_CHOICES };

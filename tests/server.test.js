@@ -424,3 +424,37 @@ dtest('a sync step the host killed is reported as resumable and finishes', async
     assert.strictEqual(b.syncState, 'ok');
   } finally { await t.done(); }
 });
+
+dtest('history: extending it fetches older days once; daily top-ups stay small', async () => {
+  const t = await setup();
+  try {
+    const me = await t.signIn();
+    const id = (await t.call('GET', '/api/accounts')).body.accounts[0].id;
+    const syncAll = async () => { let a, n = 0; do { a = (await t.call('POST', `/api/accounts/${id}/sync`, { body: {}, csrf: me.csrf })).body.account; } while (a.syncState === 'partial' && ++n < 60); return a; };
+    let a = await syncAll();
+    assert.strictEqual(a.historyDays, 90);
+    assert.strictEqual(a.syncedFrom, isoDaysAgo(89));
+    const oldest = async () => (await t.app.db.get('SELECT MIN(date) AS d FROM daily WHERE account_id = ?', id)).d;
+    assert.ok(await oldest() >= isoDaysAgo(89));
+    // Bad values are refused.
+    assert.strictEqual((await t.call('PUT', `/api/accounts/${id}/settings`, { body: { historyDays: 5000 }, csrf: me.csrf })).status, 400);
+    assert.strictEqual((await t.call('PUT', `/api/accounts/${id}/settings`, { body: {}, csrf: me.csrf })).status, 400);
+    // One year: the next sync reaches back a year.
+    a = (await t.call('PUT', `/api/accounts/${id}/settings`, { body: { historyDays: 365 }, csrf: me.csrf })).body.account;
+    assert.strictEqual(a.historyDays, 365);
+    assert.strictEqual(a.autoSync, true, 'other settings are left alone');
+    a = await syncAll();
+    assert.strictEqual(a.syncState, 'ok');
+    assert.strictEqual(a.syncedFrom, isoDaysAgo(364));
+    // The next sync is a normal top-up of the last few days, not another year.
+    await t.app.db.run('UPDATE ad_accounts SET last_synced_at = 0 WHERE id = ?', id);
+    const before = t.mock.stats ? t.mock.stats.calls : null;
+    a = await syncAll();
+    const cursorRun = await t.app.db.get('SELECT synced_from FROM ad_accounts WHERE id = ?', id);
+    assert.strictEqual(cursorRun.synced_from, isoDaysAgo(364));
+    if (before !== null) assert.ok(t.mock.stats.calls - before < 40, `top-up used ${t.mock.stats.calls - before} calls`);
+    // Shrinking history keeps what's already synced.
+    a = (await t.call('PUT', `/api/accounts/${id}/settings`, { body: { historyDays: 90 }, csrf: me.csrf })).body.account;
+    assert.strictEqual(a.syncedFrom, isoDaysAgo(364));
+  } finally { await t.done(); }
+});

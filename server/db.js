@@ -108,6 +108,9 @@ const MIGRATIONS = [
   ['ad_accounts', 'auto_sync', 'INTEGER DEFAULT 1'],
   ['ad_accounts', 'sync_started_at', 'INTEGER'],
   ['ad_accounts', 'sync_cursor', 'TEXT'],
+  ['ad_accounts', 'history_days', 'INTEGER'],     // how far back to keep daily data (null = server default)
+  ['ad_accounts', 'synced_from', 'TEXT'],         // earliest date with daily data (YYYY-MM-DD)
+  ['ad_accounts', 'sync_run_from', 'TEXT'],       // first date of the sync in progress
 ];
 
 // Every table that holds a user's data (used to delete a user completely).

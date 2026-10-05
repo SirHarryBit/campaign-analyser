@@ -10,7 +10,7 @@ const crypto = require('node:crypto');
 const { openDb, USER_TABLES } = require('./db.js');
 const S = require('./security.js');
 const { GraphClient, MetaError } = require('./meta/client.js');
-const { syncStep, todayIn, addDays } = require('./meta/sync.js');
+const { syncStep, todayIn, addDays, HISTORY_CHOICES } = require('./meta/sync.js');
 const { buildCampaigns, cleanManual, LEVELS } = require('./entities.js');
 const { cleanSnapshot } = require('./snapshot.js');
 
@@ -97,6 +97,8 @@ async function createApp(config, { sleep, log = console } = {}) {
       ? { syncState: 'partial', syncError: null, syncProgress: 'Interrupted; continuing' }
       : { syncState: a.sync_state, syncError: a.sync_error, syncProgress: a.sync_progress }),
     lastSyncedAt: a.last_synced_at, syncedUntil: a.synced_until, nextAttemptAt: a.next_attempt_at,
+    syncedFrom: a.synced_from || (a.synced_until ? addDays(a.synced_until, -(meta.backfillDays - 1)) : null),
+    historyDays: a.history_days || meta.backfillDays,
   });
   async function upsertAccounts(userId, accts) {
     await db.batch(accts.map((a) => [`INSERT INTO ad_accounts (id, user_id, name, currency, timezone, account_status) VALUES (?, ?, ?, ?, ?, ?)
@@ -345,13 +347,16 @@ async function createApp(config, { sleep, log = console } = {}) {
     return { account: publicAccount(await runSyncStep(s.user_id, m[1])) };
   });
 
-  // Per-account settings: daily auto-sync on or off.
+  // Per-account settings: daily auto-sync on or off, and how much history to keep.
   route('PUT', /^\/api\/accounts\/(act_\d+)\/settings$/, async (req, res, { m }) => {
     const s = await requireUser(req, { write: true });
     await account(s.user_id, m[1]);
     const b = await readBody(req);
-    if (typeof b.autoSync !== 'boolean') throw new HttpError(400, 'autoSync must be true or false.');
-    await db.run('UPDATE ad_accounts SET auto_sync = ? WHERE user_id = ? AND id = ?', b.autoSync ? 1 : 0, s.user_id, m[1]);
+    if (b.autoSync === undefined && b.historyDays === undefined) throw new HttpError(400, 'Nothing to change.');
+    if (b.autoSync !== undefined && typeof b.autoSync !== 'boolean') throw new HttpError(400, 'autoSync must be true or false.');
+    if (b.historyDays !== undefined && !HISTORY_CHOICES.includes(b.historyDays)) throw new HttpError(400, `historyDays must be one of ${HISTORY_CHOICES.join(', ')}.`);
+    if (b.autoSync !== undefined) await db.run('UPDATE ad_accounts SET auto_sync = ? WHERE user_id = ? AND id = ?', b.autoSync ? 1 : 0, s.user_id, m[1]);
+    if (b.historyDays !== undefined) await db.run('UPDATE ad_accounts SET history_days = ? WHERE user_id = ? AND id = ?', b.historyDays, s.user_id, m[1]);
     return { account: publicAccount(await account(s.user_id, m[1])) };
   });
 

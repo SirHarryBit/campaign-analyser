@@ -92,6 +92,7 @@ main { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 2
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; font-weight: 500; }
 .notes, .notices { margin: 0; padding: 12px 14px 12px 32px; background: var(--surface-2); border-radius: 8px; display: grid; gap: 4px; font-size: 14px; }
 .notices { background: var(--warn-soft); color: var(--ink); }
+.notices > .linkish { justify-self: start; text-align: left; }
 
 /* campaigns table */
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
@@ -2313,7 +2314,8 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
 
   // ---------- Meta connection (only when the app is served by the Node server) ----------
   const LEVEL_LABELS = { campaign: 'Campaigns', adset: 'Ad sets', ad: 'Ads' };
-  const PRESETS = [['last7', 'Last 7 days'], ['last14', 'Last 14 days'], ['last30', 'Last 30 days'], ['last90', 'Last 90 days'], ['this_month', 'This month'], ['last_month', 'Last month'], ['custom', 'Custom dates']];
+  const PRESETS = [['last7', 'Last 7 days'], ['last14', 'Last 14 days'], ['last30', 'Last 30 days'], ['last90', 'Last 90 days'], ['last180', 'Last 6 months'], ['last365', 'Last 12 months'], ['this_month', 'This month'], ['last_month', 'Last month'], ['custom', 'Custom dates']];
+  const HISTORY = [[90, '3 months'], [180, '6 months'], [365, '1 year'], [730, '2 years'], [1095, '3 years']];
   const META_EDITABLE = new Set(['qualifiedLeads', 'universe', 'budget', 'targeting', 'targetingNotes', 'objective']);
   const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
@@ -2324,6 +2326,8 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
       case 'last7': return { since: back(6), until: back(0) };
       case 'last14': return { since: back(13), until: back(0) };
       case 'last90': return { since: back(89), until: back(0) };
+      case 'last180': return { since: back(179), until: back(0) };
+      case 'last365': return { since: back(364), until: back(0) };
       case 'this_month': return { since: isoDay(new Date(today.getFullYear(), today.getMonth(), 1)), until: back(0) };
       case 'last_month': return { since: isoDay(new Date(today.getFullYear(), today.getMonth() - 1, 1)), until: isoDay(new Date(today.getFullYear(), today.getMonth(), 0)) };
       case 'custom': if (since && until && since <= until) return { since, until }; // falls through
@@ -2338,7 +2342,8 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
     if (s < 86400) return `${Math.round(s / 3600)} h ago`;
     return `${Math.round(s / 86400)} days ago`;
   }
-  const fmtDay = (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '');
+  // Show the year only when it isn't this year (history can go back 3 years).
+  const fmtDay = (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(iso.slice(0, 4) !== String(new Date().getFullYear()) ? { year: 'numeric' } : {}) }) : '');
 
   async function api(method, path, body) {
     const headers = { accept: 'application/json' };
@@ -2482,6 +2487,19 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
     }, 2000);
   }
 
+  /** Change how far back this account keeps data; fetching older days starts straight away. */
+  async function setHistory(days) {
+    const acct = currentAccount();
+    if (!acct) return;
+    try {
+      const d = await api('PUT', `/api/accounts/${acct.id}/settings`, { historyDays: days });
+      Object.assign(acct, d.account);
+    } catch (e) { state.meta.error = e.message; renderSource(); return; }
+    renderSource();
+    const wantFrom = isoDay(new Date(Date.now() - (days - 1) * 86400000));
+    if (!acct.syncedFrom || wantFrom < acct.syncedFrom) startMetaSync();
+  }
+
   async function setAutoSync(on) {
     const acct = currentAccount();
     if (!acct) return;
@@ -2579,8 +2597,14 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
             <div><span class="sr">Level</span><div class="seg" role="group" aria-label="Level">${Object.entries(LEVEL_LABELS).map(([v, l]) => `<button data-level="${v}" aria-pressed="${state.meta.level === v}">${l}</button>`).join('')}</div></div>
             <button class="btn small" data-act="sync" ${acct && (acct.syncState === 'running' || acct.syncState === 'partial') ? 'disabled' : ''}>Sync now</button>
             ${acct ? `<label class="switch" for="m-autosync"><input type="checkbox" role="switch" id="m-autosync" ${acct.autoSync ? 'checked' : ''}><span>Auto-sync daily</span></label>` : ''}
+            ${acct ? `<label for="m-history" title="How far back to fetch from Meta (Meta keeps 37 months)">History<select id="m-history" ${acct.syncState === 'running' || acct.syncState === 'partial' ? 'disabled' : ''}>${HISTORY.map(([d, l]) => `<option value="${d}" ${d === acct.historyDays ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}
             ${syncStatusHtml(acct)}
           </div>`;
+          // Say so when the chosen dates start before the synced data, instead of showing silent zeros.
+          if (acct && acct.syncedFrom && r.since < acct.syncedFrom && acct.syncState !== 'running' && acct.syncState !== 'partial') {
+            const need = HISTORY.find(([d]) => isoDay(new Date(Date.now() - (d - 1) * 86400000)) <= r.since);
+            html += `<p class="notices" role="status" style="padding-left:14px">Synced data starts on ${fmtDay(acct.syncedFrom)}, so days before that show as zero. ${need ? `<button class="linkish" data-history="${need[0]}">Fetch ${need[1]} of history</button>` : 'Meta keeps about 37 months of results, so older days aren\'t available.'}</p>`;
+          }
         }
         const saved = state.meta.comparisons.length ? `<span class="saved" aria-label="Saved comparisons"><b>Saved:</b>${state.meta.comparisons.map((c) => `<span class="chip-btn"><button data-cmp="${esc(c.id)}" title="${esc(LEVEL_LABELS[c.level] || '')}, ${esc(PRESETS.find((p) => p[0] === c.preset)?.[1] || 'custom dates')}">${esc(c.name)}</button><button data-cmp-del="${esc(c.id)}" aria-label="Delete saved comparison ${esc(c.name)}">×</button></span>`).join('')}</span>` : '';
         html += `${warn}${err}<div class="meta-sub">${saved}<span class="spacer"></span><button class="linkish" data-act="shares">Shared links</button><span>Signed in as ${esc(me.name)}${state.server.mode === 'demo' ? ' (demo)' : ''}</span><button class="linkish" data-act="logout">Sign out</button><button class="linkish" data-act="delete-me">Delete my data</button></div>
@@ -2701,6 +2725,7 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
       if (t.dataset.source) { switchSource(t.dataset.source); return; }
       if (t.dataset.level) { state.meta.level = t.dataset.level; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
       if (t.dataset.act) { handleMetaAction(t); return; }
+      if (t.dataset.history) { setHistory(Number(t.dataset.history)); return; }
       if (t.dataset.cmp) { applySaved(t.dataset.cmp); return; }
       if (t.dataset.cmpDel) { api('DELETE', `/api/comparisons/${encodeURIComponent(t.dataset.cmpDel)}`).then(() => { state.meta.comparisons = state.meta.comparisons.filter((c) => c.id !== t.dataset.cmpDel); renderSource(); }).catch(() => {}); return; }
       if (t.dataset.copy) { copyText(t.dataset.copy, t); return; }
@@ -2731,6 +2756,7 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
     document.addEventListener('change', (e) => {
       const tid = e.target.id;
       if (tid === 'm-autosync') { setAutoSync(e.target.checked); return; }
+      if (tid === 'm-history') { setHistory(Number(e.target.value)); return; }
       if (tid === 'm-account') { state.meta.accountId = e.target.value; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
       if (tid === 'm-preset') { state.meta.preset = e.target.value; if (e.target.value === 'custom') { const r = presetRange('last30'); state.meta.since = state.meta.since || r.since; state.meta.until = state.meta.until || r.until; } save(); loadEntities(); return; }
       if (tid === 'm-since' || tid === 'm-until') { state.meta[tid === 'm-since' ? 'since' : 'until'] = e.target.value; if (state.meta.since && state.meta.until && state.meta.since <= state.meta.until) { save(); loadEntities(); } return; }

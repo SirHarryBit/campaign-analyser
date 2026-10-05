@@ -28,7 +28,7 @@ You need **Node 22.13 or newer** and no npm packages.
 
 ```bash
 npm start      # builds the page and starts the server at http://localhost:8787
-npm test       # 61 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
+npm test       # 63 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
 ```
 
 - Without a `.env`, the server runs in **demo mode** with a simulated ad account. Paste `demo-short-token` into the token box (or use "Continue with Facebook") to try every feature without a Meta app.
