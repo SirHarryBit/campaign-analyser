@@ -1,23 +1,26 @@
 {
   "name": "campaign-analyser",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Compare Meta ad campaigns and get plain-English verdicts. Connects to the Meta Marketing API or imports CSV/XLSX exports. Runs locally or on Vercel.",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node build.js && node --no-warnings=ExperimentalWarning server/index.js",
-    "demo": "node build.js && node --no-warnings=ExperimentalWarning -e \"process.env.DEMO='1';require('./server/index.js')\"",
-    "build": "node build.js",
-    "test": "node --no-warnings=ExperimentalWarning --test tests/core.test.js tests/charts.test.js tests/meta-map.test.js tests/server.test.js",
-    "dev": "nodemon --watch server --watch src --ext js,html --exec \"npm start\""
+    "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts && node --experimental-strip-types --no-warnings=ExperimentalWarning server/index.js",
+    "demo": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts && node --experimental-strip-types --no-warnings=ExperimentalWarning -e \"process.env.DEMO='1';require('./server/index.js')\"",
+    "build": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test tests/core.test.js tests/charts.test.ts tests/meta-map.test.js tests/server.test.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "nodemon --watch server --watch src --ext js,ts,html --exec \"npm start\""
   },
   "license": "MIT",
   "dependencies": {
     "@libsql/client": "^0.15.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "@types/node": "^22.15.0",
+    "typescript": "^6.0.2"
   }
 }

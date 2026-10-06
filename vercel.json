@@ -1,11 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "node build.js",
+  "buildCommand": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts",
   "outputDirectory": "public",
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "functions": {
-    "api/index.js": { "maxDuration": 300, "includeFiles": "dist/**" }
+    "api/index.js": {
+      "maxDuration": 300,
+      "includeFiles": "dist/**"
+    }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
-  "crons": [{ "path": "/api/cron/sync", "schedule": "30 0 * * *" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/sync",
+      "schedule": "30 0 * * *"
+    }
+  ]
 }

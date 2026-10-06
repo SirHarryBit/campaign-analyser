@@ -1,0 +1,19 @@
+{
+  // Type checking only (npm run typecheck). Nothing is emitted: the build strips
+  // types with Node's built-in stripper, so only erasable TypeScript is allowed.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "moduleDetection": "force",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "erasableSyntaxOnly": true,
+    "noUnusedLocals": true,
+    "noFallthroughCasesInSwitch": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "build.ts", "tests/**/*.ts"]
+}

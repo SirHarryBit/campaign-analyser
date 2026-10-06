@@ -28,7 +28,8 @@ You need **Node 22.13 or newer** and no npm packages.
 
 ```bash
 npm start      # builds the page and starts the server at http://localhost:8787
-npm test       # 63 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
+npm test       # 67 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
+npm run typecheck   # TypeScript check (after npm install)
 ```
 
 - Without a `.env`, the server runs in **demo mode** with a simulated ad account. Paste `demo-short-token` into the token box (or use "Continue with Facebook") to try every feature without a Meta app.
@@ -57,8 +58,8 @@ Hobby is for non-commercial use. Locally there are no npm dependencies; hosted, 
 ```
 Browser (dist/index.html)            Node server (server/)                    Meta
   src/core.js   analysis engine   <-- /api/accounts/:id/entities <-- SQLite <-- sync.js <-- Marketing API v25
-  src/charts.js SVG charts            /api/entities/:id/manual                     (daily, plus "Sync now")
-  src/app.js    UI                    /api/comparisons, /api/shares, /r/:token
+  src/charts.ts SVG charts            /api/entities/:id/manual                     (daily, plus "Sync now")
+  src/app.ts    UI                    /api/comparisons, /api/shares, /r/:token
                                       /auth/meta/token  (pasted token; or OAuth)
                                       /meta/deauthorize, /meta/data-deletion
 ```
@@ -66,8 +67,10 @@ Browser (dist/index.html)            Node server (server/)                    Me
 | Path | What it is |
 |---|---|
 | `src/core.js` | The engine: parsing, column mapping, metrics, funnel, targeting, comparison, rules-based insights and recommendations. Pure functions, shared by browser and tests. |
-| `src/charts.js` | Dependency-free SVG charts, shared by the app and the downloaded report. |
-| `src/app.js`, `src/page.html` | Browser UI, styles and the in-app guide. |
+| `src/charts.ts` | Dependency-free SVG charts (donuts, rings, mirrored gradient columns, bubble map, timeline, smoothed trend lines), shared by the app and the downloaded report. |
+| `src/app.ts`, `src/page.html` | Browser UI (Overview, Charts, Details and Fixes views), styles and the in-app guide. |
+| `src/types.d.ts` | Shared types for the engine, charts and UI. |
+| `build.ts` | Builds `dist/`: strips TypeScript types with Node's built-in stripper, so building needs no npm packages. |
 | `server/meta/client.js` | Graph API client: cursor paging, `appsecret_proof`, back-off on rate limits using Meta's usage headers, error classification. |
 | `server/meta/map.js` | Meta → analyser mapping: leads from `actions` without double counting, budgets in paise (lifetime budgets pro-rated to the range), objectives, targeting notes, audience estimates. |
 | `server/meta/sync.js` | Resumable, incremental sync in time-boxed steps (fits serverless limits). The first run backfills 90 days; later runs re-fetch the last 3 days, because attribution keeps settling. Ranges Meta refuses as too large are split in half. A database lease stops two syncs of the same account. |
@@ -91,7 +94,8 @@ Browser (dist/index.html)            Node server (server/)                    Me
 - **Never commit `data/` or `.env`.** Both are in `.gitignore`.
 
 ## Design decisions
-- **Almost no dependencies.** Plain JavaScript, Node built-ins (`node:http`, `node:sqlite`, `fetch`, `crypto`), one CDN script (SheetJS, for Excel files), and `@libsql/client` only when hosted.
+- **TypeScript without a build toolchain.** The browser code is TypeScript using only erasable syntax, so Node's built-in type stripping turns it into JavaScript at build time; `tsc` is used only for checking. The server is still JavaScript.
+- **Almost no dependencies.** Node built-ins (`node:http`, `node:sqlite`, `fetch`, `crypto`), one CDN script (SheetJS, for Excel files), and `@libsql/client` only when hosted.
 - **Serverless-ready.** The same request handler runs under `node server/index.js` and as a single Vercel function. Syncs are resumable steps, not long background jobs.
 - **Rules before AI.** Every verdict comes from a named, testable rule over computed metrics, so it can be explained.
 - **Daily rows at ad level, added up on demand.** Any level and any date range work without re-fetching. Unique reach is the exception, because it can't be added up, so it is fetched live for the range and cached.
