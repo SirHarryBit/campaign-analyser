@@ -278,9 +278,9 @@
     if (rows.length < 2) return { empty: 'Add qualified leads (from your CRM) to at least two lead campaigns to see this.' };
     const narrow = W < 520;
     const half = narrow ? 92 : 118;
-    const m = { l: narrow ? 44 : 64, r: 8, t: 22 };
+    const m = { l: narrow ? 62 : 82, r: 8, t: 24 }; // left margin holds the two rotated captions and the tick labels
     const y0 = m.t + half;
-    const H = m.t + 2 * half + 18 + 26;
+    const H = m.t + 2 * half + 20 + 24;
     const tv = ticks(Math.max(...rows.map((it) => it.m.cpql as number)));
     const top = tv[tv.length - 1];
     const sh = (v: number): number => (v / top) * half;
@@ -296,7 +296,10 @@
     }
     body += `<line x1="${m.l}" x2="${W - m.r}" y1="${y0}" y2="${y0}" style="stroke:${pal.ink2}" opacity="0.5"/>`;
     body += txt(m.l - 8, y0 + 4, '0', { size: 11, fill: pal.ink2, anchor: 'end' });
-    body += txt(m.l, 12, '↑ Cost per lead', { size: 11.5, fill: pal.ink2, weight: 500 });
+    // Captions run up the left edge, clear of every bar and value label.
+    // Rotated text runs bottom-to-top: 'start' grows upward from the point, 'end' grows downward.
+    const vcap = (y: number, anchor: 'start' | 'end', s: string): string => `<text x="0" y="0" transform="translate(12 ${f1(y)}) rotate(-90)" font-size="11.5" text-anchor="${anchor}" font-weight="500" style="fill:${pal.ink2}">${esc(s)}</text>`;
+    body += vcap(y0 - 8, 'start', 'Per lead ↑') + vcap(y0 + 8, 'end', '↓ Per qualified lead');
     rows.forEach((it, i) => {
       const x = m.l + band * i + (band - bw) / 2;
       const a = sh(it.m.cpl as number), b = sh(it.m.cpql as number);
@@ -309,7 +312,6 @@
       body += txt(x + bw / 2, y0 + b + 15, shortMoney(C, cur, it.m.cpql as number), { size: 11.5, fill: pal.ink, anchor: 'middle', weight: 500 });
       body += txt(x + bw / 2, H - 6, trunc(it.c.name, band - 6), { size: 11.5, fill: pal.ink2, anchor: 'middle' });
     });
-    body += txt(m.l, y0 + half + 14, '↓ Cost per qualified lead', { size: 11.5, fill: pal.ink2, weight: 500 });
     const byCpl = [...rows].sort((p, q) => (p.m.cpl as number) - (q.m.cpl as number));
     const byCpql = [...rows].sort((p, q) => (p.m.cpql as number) - (q.m.cpql as number));
     const note = byCpl[0] !== byCpql[0]

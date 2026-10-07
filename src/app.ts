@@ -553,7 +553,29 @@
         ${r.recommendations.reallocation ? `<p class="whatif"><b>What if you move budget?</b> ${esc(r.recommendations.reallocation.text)}</p>` : ''}</section>`;
   }
 
+  /** Redraw one chart card in place, so switching a chart's measure doesn't move the page. */
+  function redrawChart(id: string): void {
+    const K = window.CampaignCharts;
+    const old = document.getElementById('chart-' + id);
+    const r = state.lastResult;
+    if (!K || !old || !r) { renderCompare(); return; }
+    const widths = chartWidths($('#cmp-view'));
+    const ch = K.buildCharts(r, { C, cur: state.settings.currency, width: widths.wide, halfWidth: widths.half, slot: colorSlot, trendMetric: state.trendMetric, only: [id] })[0];
+    if (!ch) return;
+    const focused = (document.activeElement as HTMLElement | null)?.dataset?.trend;
+    old.outerHTML = chartCard(ch, K.TREND_METRICS);
+    // Keep keyboard focus on the measure button that was pressed.
+    if (focused) document.querySelector<HTMLElement>(`#chart-${id} [data-trend="${focused}"]`)?.focus({ preventScroll: true });
+  }
+
   function renderCompare(): void {
+    // Re-rendering replaces the whole view; keep the reader where they were.
+    const y = window.scrollY;
+    renderCompareInner();
+    if (y) window.scrollTo(0, Math.min(y, document.documentElement.scrollHeight));
+  }
+
+  function renderCompareInner(): void {
     const host = $('#compare-body');
     const list = selectedCampaigns();
     if (list.length < 2) {
@@ -662,6 +684,19 @@
     }
   }
 
+  // ---------- Theme (per browser; light unless dark was chosen) ----------
+  const THEME_KEY = 'campaign-analyser-theme';
+  type Theme = 'light' | 'dark';
+  function currentTheme(): Theme {
+    return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  }
+  function setTheme(t: Theme): void {
+    if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    try { if (t === 'dark') localStorage.setItem(THEME_KEY, 'dark'); else localStorage.removeItem(THEME_KEY); } catch (e) { /* storage blocked: applies to this visit only */ }
+    $$('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeSet === t)));
+  }
+
   // ---------- Settings ----------
   const inputVal = (id: string): string => $<HTMLInputElement>(id).value;
   function openSettings(): void {
@@ -671,6 +706,7 @@
     $<HTMLInputElement>('#s-targetQ').value = String(Math.round((s.targetQualifiedPct ?? 0.3) * 100));
     $<HTMLInputElement>('#s-open').value = String(s.openUniverseMin);
     $<HTMLInputElement>('#s-focused').value = String(s.focusedUniverseMax);
+    $$('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeSet === currentTheme())));
     $<HTMLDialogElement>('#settings').showModal();
   }
   function saveSettings(e: Event): void {
@@ -1118,13 +1154,19 @@
       if (d.level) { state.meta.level = d.level as Level; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
       if (d.act) { handleMetaAction(t); return; }
       if (d.history) { setHistory(Number(d.history)); return; }
-      if (d.view) { state.compareView = d.view as CompareView; save(); renderCompare(); return; }
+      if (d.themeSet) { setTheme(d.themeSet === 'dark' ? 'dark' : 'light'); return; }
+      if (d.view) {
+        state.compareView = d.view as CompareView; save(); renderCompareInner();
+        const bar = document.querySelector('.cmp-bar');
+        if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: 'start' });
+        return;
+      }
       if (d.cmp) { applySaved(d.cmp); return; }
       if (d.cmpDel) { const id = d.cmpDel; api('DELETE', `/api/comparisons/${encodeURIComponent(id)}`).then(() => { state.meta.comparisons = state.meta.comparisons.filter((c) => c.id !== id); renderSource(); }).catch(() => {}); return; }
       if (d.copy) { copyText(d.copy, t); return; }
       if (d.revoke) { api('DELETE', `/api/shares/${encodeURIComponent(d.revoke)}`).then(openShares).catch(() => {}); return; }
       if (d.close) { $<HTMLDialogElement>('#' + d.close).close(); return; }
-      if (d.trend) { state.trendMetric = d.trend; renderCompare(); return; }
+      if (d.trend) { state.trendMetric = d.trend; redrawChart('trend'); return; }
       if (d.dl) { (t.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open'); download(d.dl); return; }
       if (t.classList.contains('tab')) { state.tab = d.tab || 'campaigns'; save(); render(); window.scrollTo(0, 0); }
       else if (d.tabGo) { state.tab = d.tabGo; save(); render(); }

@@ -1,4 +1,8 @@
 <title>Campaign Analyser</title>
+<script>
+/* Apply the saved theme before the page paints. Light unless the reader chose dark. */
+try { if (localStorage.getItem('campaign-analyser-theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -30,18 +34,16 @@
   --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --radius: 18px;
   --radius-sm: 12px;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --backdrop: #0d0c0f; --bg: #17161a; --surface: #201f24; --surface-2: #2a2830; --ink: #f3f0ea; --ink-2: #a9a4ae; --line: #34313a;
-    --accent: #f3f0ea; --accent-ink: #17161a; --brand: #8b97f7; --brand-soft: #262a4d;
-    --good: #5fd09a; --good-soft: #17352a; --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8f7e; --bad-soft: #40201b;
-    --s1: #6b7af2; --s2: #d0701e; --s3: #1a98c4; --s4: #c9579e; --s5: #8c9a2e; --s0: #4b4852;
-    --t-open: #8b97f7; --t-loose: #f0b85a; --t-focused: #e58fc0;
-    --hero: radial-gradient(120% 140% at 0% 0%, #b8661f 0%, rgba(184, 102, 31, 0) 55%), linear-gradient(135deg, #8f4a16 0%, #7d4a3c 35%, #4a4597 72%, #2f3c9e 100%);
-    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
-    color-scheme: dark;
-  }
+  /* glass */
+  --glow: radial-gradient(42% 38% at 8% 4%, rgba(242, 164, 74, .42), transparent 70%), radial-gradient(38% 34% at 92% 14%, rgba(91, 108, 240, .32), transparent 70%), radial-gradient(44% 38% at 74% 88%, rgba(34, 176, 200, .26), transparent 70%), radial-gradient(34% 30% at 16% 78%, rgba(217, 84, 138, .18), transparent 70%);
+  --glass: rgba(255, 253, 250, .56);
+  --glass-strong: rgba(255, 253, 250, .84);
+  --glass-soft: rgba(255, 253, 250, .38);
+  --glass-border: rgba(255, 255, 255, .78);
+  --glass-edge: rgba(110, 90, 60, .10);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, .85);
+  --blur: blur(22px) saturate(1.5);
+  color-scheme: light;
 }
 :root[data-theme="dark"] {
   --backdrop: #0d0c0f; --bg: #17161a; --surface: #201f24; --surface-2: #2a2830; --ink: #f3f0ea; --ink-2: #a9a4ae; --line: #34313a;
@@ -51,6 +53,13 @@
   --t-open: #8b97f7; --t-loose: #f0b85a; --t-focused: #e58fc0;
   --hero: radial-gradient(120% 140% at 0% 0%, #b8661f 0%, rgba(184, 102, 31, 0) 55%), linear-gradient(135deg, #8f4a16 0%, #7d4a3c 35%, #4a4597 72%, #2f3c9e 100%);
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  --glow: radial-gradient(42% 38% at 8% 4%, rgba(201, 106, 31, .30), transparent 70%), radial-gradient(38% 34% at 92% 14%, rgba(91, 108, 240, .28), transparent 70%), radial-gradient(44% 38% at 74% 88%, rgba(26, 152, 196, .20), transparent 70%), radial-gradient(34% 30% at 16% 78%, rgba(201, 87, 158, .14), transparent 70%);
+  --glass: rgba(38, 36, 44, .50);
+  --glass-strong: rgba(30, 29, 35, .86);
+  --glass-soft: rgba(48, 46, 56, .40);
+  --glass-border: rgba(255, 255, 255, .10);
+  --glass-edge: rgba(0, 0, 0, .25);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, .07);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -69,6 +78,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* top bar */
 .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); }
+@media (max-width: 760px) { .top { position: static; } }
 .top-in { padding: 18px clamp(16px, 3vw, 36px) 10px; display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
 .brand svg { flex: none; }
@@ -225,7 +235,7 @@ tbody tr:hover > * { background: color-mix(in srgb, var(--surface-2) 45%, transp
 .tag { font-size: 11px; font-weight: 500; padding: 0 7px; border-radius: 99px; }
 .tag.good { background: var(--good-soft); color: var(--good); }
 .tag.bad { background: var(--bad-soft); color: var(--bad); }
-@media (max-width: 760px) { .bar-row { grid-template-columns: minmax(0, 6.5rem) 1fr auto; } }
+@media (max-width: 760px) { .bar-row { grid-template-columns: 1fr auto; row-gap: 2px; } .bar-name { grid-column: 1 / -1; } .bar-track { grid-column: 1; } }
 .funnel { min-width: 640px; }
 .funnel th[scope="row"] { min-width: 190px; font-weight: 500; }
 .lvl { font-size: 12px; background: var(--surface-2); padding: 1px 7px; border-radius: 6px; margin-right: 4px; }
@@ -268,6 +278,7 @@ tbody tr:hover > * { background: color-mix(in srgb, var(--surface-2) 45%, transp
 .chart-table { font-size: 13px; }
 .chart-table th, .chart-table td { padding: 8px 12px; }
 .trend-switch { margin-top: 6px; }
+.theme-pick { margin-bottom: 6px; }
 .chart-svg .col .xhair { transition: opacity .1s; }
 .chart-svg .col:hover .xhair { opacity: .6; }
 #chart-tip { position: fixed; z-index: 60; pointer-events: none; max-width: 280px; white-space: pre-line; background: color-mix(in srgb, var(--surface) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 9px 13px; font-size: 12.5px; line-height: 1.5; box-shadow: 0 10px 30px rgba(30, 24, 14, .16); }
@@ -375,6 +386,38 @@ legend { font-size: 12.5px; padding: 0 6px; color: var(--ink-2); text-transform:
 .usage { border-top: 1px solid var(--line); padding: 12px 20px 16px; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 4px; }
 .viewer-banner { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data-edit], body.viewer .owner-only { display: none !important; }
+/* ---------- Glass layer ----------
+   Frosted, translucent surfaces over soft colour glows in the shell background.
+   Text sits on surfaces that stay at least ~50% opaque, so contrast holds. */
+.shell { background-color: var(--bg); background-image: var(--glow); background-attachment: fixed; background-repeat: no-repeat; }
+.card, .block, .table-wrap, .empty, .meta-bar, .connect-card, .dropzone, .actions, .guide nav, .share-out {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shine), 0 0 0 1px var(--glass-edge), 0 10px 30px rgba(40, 30, 15, .07);
+}
+.dropzone { border-style: dashed; }
+.top { background: color-mix(in srgb, var(--bg) 30%, transparent); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+thead th { background: transparent; }
+.subtabs, .seg { background: var(--glass-soft); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); box-shadow: inset 0 0 0 1px var(--glass-border); }
+.subtabs button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: var(--glass-strong); box-shadow: var(--glass-shine), 0 2px 10px rgba(30, 20, 10, .10); }
+.meta-line span, .btn.ghost, .badge:not(.up):not(.down), .saved .chip-btn { background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); border-color: var(--glass-border); }
+.chart-note, .whatif, .note { background: var(--glass-soft); box-shadow: inset 0 0 0 1px var(--glass-border); }
+.rbar, .rank, .lvl { background: var(--glass-soft); }
+.menu-list, dialog { background: var(--glass-strong); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); border-color: var(--glass-border); }
+dialog::backdrop { background: rgb(20 16 10 / .28); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.hero-card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 14px 34px rgba(80, 60, 160, .22); }
+.hero-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(160deg, rgba(255, 255, 255, .22), transparent 42%); pointer-events: none; }
+.heads-up, .banner, .notices { background: color-mix(in srgb, var(--warn-soft) 78%, transparent); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); box-shadow: inset 0 0 0 1px var(--glass-border); }
+.field input, .field select, .meta-bar select, .meta-bar input[type=date], .token-row input, .inline-form input { background: var(--glass-soft); border-color: var(--glass-border); }
+tbody tr:hover > * { background: var(--glass-soft); }
+/* Browsers without backdrop blur get solid surfaces instead of see-through ones. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass: var(--surface); --glass-soft: var(--surface-2); --glass-strong: var(--surface); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: var(--surface); --glass-soft: var(--surface-2); --glass-strong: var(--surface); }
+}
 </style>
 
 
@@ -560,6 +603,10 @@ body.viewer [data-tab="campaigns"], body.viewer #btn-settings, body.viewer [data
         <label class="field" for="s-targetQ"><span class="flabel">Target qualified leads %</span><input id="s-targetQ" type="number" min="0" max="100" step="1"><span class="help">Share of leads your team considers worth following up.</span></label>
         <label class="field" for="s-currency"><span class="flabel">Currency</span><select id="s-currency"><option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>SGD</option><option>AUD</option><option>CAD</option></select></label>
       </div></fieldset>
+      <fieldset><legend>Appearance</legend>
+        <div class="seg theme-pick" role="group" aria-label="Theme"><button type="button" data-theme-set="light" aria-pressed="true">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+        <p class="help">Saved in this browser. Light is the default.</p>
+      </fieldset>
       <fieldset><legend>Targeting thresholds (universe size)</legend><div class="fgrid">
         <label class="field" for="s-open"><span class="flabel">Open from</span><input id="s-open" type="number" min="0" step="1000"><span class="help">Default 1,00,00,000 (1 crore).</span></label>
         <label class="field" for="s-focused"><span class="flabel">Focused up to</span><input id="s-focused" type="number" min="0" step="1000"><span class="help">Default 10,00,000 (10 lakh).</span></label>
