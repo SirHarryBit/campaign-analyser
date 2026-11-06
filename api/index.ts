@@ -7,6 +7,10 @@ import type { AppApi, App } from '../server/app.ts';
 const { loadConfig }: ConfigApi = require('../server/config.ts');
 const { createApp }: AppApi = require('../server/app.ts');
 
+// Vercel's tracer does not follow `require('./x.ts')`, so the server files are shipped through
+// `includeFiles` in vercel.json. This line (never executed) lets the tracer see the database driver.
+if (process.env.NEVER_SET_TRACE_HINT) require('@libsql/client');
+
 let appPromise: Promise<App> | null = null;
 
 module.exports = async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
