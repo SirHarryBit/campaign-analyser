@@ -373,6 +373,18 @@ legend { font-size: 12.5px; padding: 0 6px; color: var(--ink-2); text-transform:
 .linkish { border: 0; background: none; padding: 0; font: inherit; font-size: 13.5px; color: var(--brand); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .thumb { width: 38px; height: 38px; border-radius: 10px; object-fit: cover; flex: none; background: var(--surface-2); }
 .cname .cn-row { display: flex; gap: 10px; align-items: center; }
+.list-tools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 0 0 12px; }
+.list-tools > * { min-width: 0; }
+.lt-search { flex: 1 1 220px; }
+.lt-search input { width: 100%; font-size: 14px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--ink); min-height: 38px; }
+.lt-sort { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.lt-sort select { font-size: 14px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--ink); min-height: 38px; max-width: 100%; }
+.ctable tfoot td, .ctable tfoot th { border-top: 2px solid var(--line); font-weight: 600; background: var(--surface-2); }
+.ctable tfoot th { text-align: left; }
+#list-dl-status { font-size: 12.5px; color: var(--ink-2); align-self: center; }
+.list-tools .seg .n { font-size: 11.5px; color: var(--ink-2); margin-left: 2px; font-variant-numeric: tabular-nums; }
+.list-tools .seg button[aria-pressed="true"] .n { color: var(--ink); }
+.lt-search input, .lt-sort select { background: var(--glass-soft); border-color: var(--glass-border); }
 .status-chip { font-size: 10.5px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; vertical-align: 1px; }
 .status-chip.on { color: var(--good); border-color: currentColor; }
 .inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -629,12 +641,13 @@ tbody tr:hover > * { background: var(--glass-soft); }
  * Pure functions only (no DOM), so the same file runs in the browser and in Node tests.
  * Exposes `CampaignCore` on window, and module.exports in Node.
  */
-(function (root) {
-  'use strict';
+                                // spreadsheet rows and merged campaigns are built up field by field
+
+(function (root                            ) {
 
   // ---------- Constants ----------
 
-  const FUNNEL_LEVELS = [
+  const FUNNEL_LEVELS                = [
     { level: 1, stage: 'Awareness', name: 'Reach & impressions', kpis: ['impressions', 'reach', 'cpm'] },
     { level: 2, stage: 'Awareness', name: 'Frequency', kpis: ['frequency'] },
     { level: 3, stage: 'Engagement', name: 'Clicks & views', kpis: ['clicks', 'ctr', 'cpc', 'views', 'costPerView'] },
@@ -642,7 +655,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     { level: 5, stage: 'Conversion', name: 'Conversions', kpis: ['conversions', 'cpa', 'roas'] },
   ];
 
-  const OBJECTIVES = {
+  const OBJECTIVES                        = {
     awareness: { label: 'Awareness / reach', levels: [1, 2], primaryCost: 'cpm' },
     traffic: { label: 'Traffic', levels: [3], primaryCost: 'cpc' },
     engagement: { label: 'Engagement', levels: [3], primaryCost: 'cpc' },
@@ -652,9 +665,9 @@ tbody tr:hover > * { background: var(--glass-soft); }
   };
 
   const PLATFORMS = ['Meta', 'Google', 'LinkedIn', 'YouTube', 'Other'];
-  const TARGETING = { open: 'Open', loose: 'Loose', focused: 'Focused', unknown: 'Not classified' };
+  const TARGETING                                = { open: 'Open', loose: 'Loose', focused: 'Focused', unknown: 'Not classified' };
 
-  const DEFAULT_SETTINGS = {
+  const DEFAULT_SETTINGS           = {
     currency: 'INR',
     targetCpl: null, // your own target, optional
     targetQualifiedPct: 0.3, // 30%
@@ -665,7 +678,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
   };
 
   // Every field a campaign can hold. `input: true` means the user can type it in.
-  const FIELDS = [
+  const FIELDS             = [
     { key: 'name', label: 'Campaign', type: 'text' },
     { key: 'platform', label: 'Platform', type: 'select', options: PLATFORMS },
     { key: 'objective', label: 'Objective', type: 'select', options: Object.keys(OBJECTIVES) },
@@ -689,7 +702,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
   ];
 
   // Header aliases for Meta Ads Manager, Google Ads and generic exports (lower-case, trimmed).
-  const ALIASES = {
+  const ALIASES                           = {
     name: ['campaign name', 'campaign', 'ad set name', 'ad name', 'name'],
     platform: ['platform', 'publisher platform', 'channel', 'network'],
     objective: ['objective', 'campaign objective', 'campaign type', 'buying type objective'],
@@ -717,7 +730,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
 
   // ---------- Parsing helpers ----------
 
-  function normHeader(h) {
+  function normHeader(h         )         {
     return String(h || '')
       .toLowerCase()
       .replace(/\((inr|usd|eur|gbp|aud|cad|sgd|aed)\)/g, '')
@@ -725,7 +738,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
       .trim();
   }
 
-  function detectCurrency(headers) {
+  function detectCurrency(headers          )                {
     for (const h of headers) {
       const m = String(h).match(/\((INR|USD|EUR|GBP|AUD|CAD|SGD|AED)\)/i);
       if (m) return m[1].toUpperCase();
@@ -733,7 +746,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     return null;
   }
 
-  function parseNumber(v) {
+  function parseNumber(v         )                {
     if (v === null || v === undefined) return null;
     if (typeof v === 'number') return Number.isFinite(v) ? v : null;
     let s = String(v).trim();
@@ -745,9 +758,9 @@ tbody tr:hover > * { background: var(--glass-soft); }
     return pct ? n / 100 : n;
   }
 
-  function parseDate(v) {
+  function parseDate(v         )                {
     if (v === null || v === undefined || v === '') return null;
-    if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+    if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
     if (typeof v === 'number' && v > 20000 && v < 80000) {
       // Excel serial date
       const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
@@ -759,10 +772,10 @@ tbody tr:hover > * { background: var(--glass-soft); }
     m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); // dd/mm/yyyy (India default)
     if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
     const d = new Date(s);
-    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
   }
 
-  function guessObjective(text) {
+  function guessObjective(text         )                      {
     const t = String(text || '').toLowerCase();
     if (!t) return null;
     if (/lead/.test(t)) return 'leads';
@@ -775,9 +788,9 @@ tbody tr:hover > * { background: var(--glass-soft); }
   }
 
   /** Build {field: headerIndex} from a header row. */
-  function mapColumns(headers) {
+  function mapColumns(headers          )                         {
     const norm = headers.map(normHeader);
-    const map = {};
+    const map                         = {};
     for (const [field, aliases] of Object.entries(ALIASES)) {
       let idx = -1;
       for (const a of aliases) {
@@ -793,7 +806,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     return map;
   }
 
-  function detectPlatform(headers) {
+  function detectPlatform(headers          )                {
     const n = headers.map(normHeader);
     if (n.includes('amount spent') || n.includes('reporting starts') || n.includes('result indicator')) return 'Meta';
     if (n.includes('impr.') || n.includes('all conv.') || n.includes('avg. cpc')) return 'Google';
@@ -804,7 +817,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
    * Turn spreadsheet rows (array of arrays, first row = headers) into campaigns.
    * Rows sharing a campaign name are merged (daily or ad-set breakdowns).
    */
-  function rowsToCampaigns(rows, opts = {}) {
+  function rowsToCampaigns(rows             , opts                        = {}) {
     if (!rows || rows.length < 2) return { campaigns: [], mapping: {}, warnings: ['The file has no data rows.'] };
     const headers = rows[0].map((h) => String(h ?? ''));
     const mapping = mapColumns(headers);
@@ -814,14 +827,14 @@ tbody tr:hover > * { background: var(--glass-soft); }
     if (mapping.name === undefined) warnings.push('No campaign name column found; rows were named "Campaign 1", "Campaign 2"….');
     if (mapping.spend === undefined) warnings.push('No spend column found. Add spend by hand to get cost metrics.');
 
-    const byName = new Map();
+    const byName = new Map             ();
     rows.slice(1).forEach((r, i) => {
       if (!r || r.every((c) => c === null || c === undefined || String(c).trim() === '')) return;
-      const get = (f) => (mapping[f] === undefined ? undefined : r[mapping[f]]);
+      const get = (f        )          => (mapping[f] === undefined ? undefined : r[mapping[f]]);
       const rawName = String(get('name') ?? '').trim();
       if (/^(total|results from|grand total)/i.test(rawName)) return; // skip export summary rows
       const name = rawName || `Campaign ${i + 1}`;
-      const c = { name };
+      const c      = { name };
       for (const f of ['budget', 'spend', 'impressions', 'reach', 'frequency', 'clicks', 'views', 'landingPageViews', 'leads', 'qualifiedLeads', 'conversions', 'conversionValue', 'universe']) {
         const v = parseNumber(get(f));
         if (v !== null) c[f] = v;
@@ -844,7 +857,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
       if (notes) c.targetingNotes = String(notes);
 
       if (!byName.has(name)) byName.set(name, c);
-      else mergeInto(byName.get(name), c);
+      else mergeInto(byName.get(name)       , c);
     });
 
     const campaigns = [...byName.values()].map((c) => normaliseCampaign({ ...c, currency: currency || undefined }));
@@ -852,7 +865,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     return { campaigns, mapping, headers, currency, warnings };
   }
 
-  function mergeInto(a, b) {
+  function mergeInto(a     , b     )       {
     for (const f of ADDITIVE) if (b[f] !== undefined) a[f] = (a[f] || 0) + b[f];
     if (b.reach !== undefined) a.reach = Math.max(a.reach || 0, b.reach);
     if (b.universe !== undefined) a.universe = Math.max(a.universe || 0, b.universe);
@@ -863,45 +876,45 @@ tbody tr:hover > * { background: var(--glass-soft); }
   }
 
   let idCounter = 0;
-  function newId() {
+  function newId()         {
     idCounter += 1;
     return 'c' + Date.now().toString(36) + idCounter.toString(36);
   }
 
-  function normaliseCampaign(c) {
-    const out = { id: c.id || newId(), targeting: 'auto', platform: 'Other', ...c };
+  function normaliseCampaign(c                   )           {
+    const out      = { id: c.id || newId(), targeting: 'auto', platform: 'Other', ...c };
     for (const f of FIELDS) {
       if (['int', 'num', 'money'].includes(f.type) && out[f.key] !== undefined && out[f.key] !== null) {
         const n = parseNumber(out[f.key]);
         out[f.key] = n === null ? undefined : n;
       }
     }
-    return out;
+    return out            ;
   }
 
   // ---------- Metrics ----------
 
-  const div = (a, b) => (isNum(a) && isNum(b) && b > 0 ? a / b : null);
-  function isNum(v) {
+  const div = (a         , b         )                => (isNum(a) && isNum(b) && b > 0 ? a / b : null);
+  function isNum(v         )              {
     return typeof v === 'number' && Number.isFinite(v);
   }
 
-  function durationDays(c) {
+  function durationDays(c                   )                {
     if (!c.startDate || !c.endDate) return null;
     const d = (Date.parse(c.endDate) - Date.parse(c.startDate)) / 86400000;
     return isNaN(d) ? null : Math.max(1, Math.round(d) + 1);
   }
 
-  function objectiveOf(c) {
+  function objectiveOf(c                   )                      {
     return c.objective && OBJECTIVES[c.objective] ? c.objective : null;
   }
 
-  function computeMetrics(c) {
+  function computeMetrics(c                   )          {
     // A zero in a tracking column usually means "not tracked" (e.g. instant forms have no landing page), not a real zero.
     if (c.landingPageViews === 0) c = { ...c, landingPageViews: undefined };
     const days = durationDays(c);
     const frequency = isNum(c.frequency) && c.frequency > 0 ? c.frequency : div(c.impressions, c.reach);
-    const m = {
+    const m          = {
       days,
       spend: isNum(c.spend) ? c.spend : null,
       budget: isNum(c.budget) ? c.budget : null,
@@ -937,16 +950,16 @@ tbody tr:hover > * { background: var(--glass-soft); }
   // ---------- Funnel levels ----------
 
   /** Levels the campaign is *aiming* at (objective, or the user's override). */
-  function targetLevels(c) {
+  function targetLevels(c                   )           {
     if (Array.isArray(c.levels) && c.levels.length) return [...c.levels].sort();
     const o = objectiveOf(c);
     return o ? OBJECTIVES[o].levels : [];
   }
 
   /** Levels the campaign has *data* for. */
-  function dataLevels(c) {
-    const has = (k) => isNum(c[k]) && c[k] > 0;
-    const lv = [];
+  function dataLevels(c                   )           {
+    const has = (k        )          => isNum(c[k]) && c[k] > 0;
+    const lv           = [];
     if (has('impressions') || has('reach')) lv.push(1);
     if (has('frequency') || (has('impressions') && has('reach'))) lv.push(2);
     if (has('clicks') || has('views')) lv.push(3);
@@ -957,8 +970,8 @@ tbody tr:hover > * { background: var(--glass-soft); }
 
   // ---------- Targeting ----------
 
-  function classifyTargeting(c, settings = DEFAULT_SETTINGS) {
-    if (c.targeting && c.targeting !== 'auto' && TARGETING[c.targeting]) return { type: c.targeting, reason: 'Set by you.' };
+  function classifyTargeting(c                   , settings           = DEFAULT_SETTINGS)                                          {
+    if (c.targeting && c.targeting !== 'auto' && TARGETING[c.targeting                 ]) return { type: c.targeting                 , reason: 'Set by you.' };
     const notes = String(c.targetingNotes || '').toLowerCase();
     if (/(advantage\+|advantage plus|broad|no detailed targeting|open targeting)/.test(notes)) return { type: 'open', reason: 'Targeting notes mention broad / Advantage+ audiences.' };
     if (/(lookalike|look-alike|custom audience|retarget|remarket|website visitors|customer list|engaged)/.test(notes)) return { type: 'focused', reason: 'Targeting notes mention a lookalike, custom or retargeting audience.' };
@@ -975,7 +988,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
   // ---------- Missing data ----------
 
   /** Inputs that matter for this campaign and are missing or zero. */
-  function missingInputs(c) {
+  function missingInputs(c                   )           {
     const o = objectiveOf(c);
     const need = ['spend', 'startDate', 'endDate', 'impressions', 'universe'];
     if (!o) need.unshift('objective');
@@ -994,7 +1007,8 @@ tbody tr:hover > * { background: var(--glass-soft); }
   // ---------- Comparison ----------
 
   // lower = better unless `higher: true`
-  const METRIC_DEFS = {
+  // Raw counts (clicks, views…) have no entry: they are shown but never ranked.
+  const METRIC_DEFS                                        = {
     cpl: { label: 'Cost per lead (CPL)', fmt: 'money' },
     cpql: { label: 'Cost per qualified lead', fmt: 'money' },
     cpm: { label: 'Cost per 1,000 impressions (CPM)', fmt: 'money' },
@@ -1025,26 +1039,26 @@ tbody tr:hover > * { background: var(--glass-soft); }
    * marketing contact uses: CPL & budget → universe & qualified % → duration.
    * For other objectives the cost metric of that funnel level replaces CPL.
    */
-  function comparisonTiers(objective) {
-    const primary = objective && OBJECTIVES[objective] ? OBJECTIVES[objective].primaryCost : 'cpl';
+  function comparisonTiers(objective                     )                        {
+    const primary            = objective && OBJECTIVES[objective] ? OBJECTIVES[objective].primaryCost : 'cpl';
     return [
-      { tier: 1, title: 'Cost and budget', why: 'Compared first: what each result cost and how much money went in.', weight: 3, metrics: [primary, 'spend', 'budget', 'dailySpend'] },
+      { tier: 1, title: 'Cost and budget', why: 'Compared first: what each result cost and how much money went in.', weight: 3, metrics: [primary, 'spend', 'budget', 'dailySpend']                },
       { tier: 2, title: 'Audience and lead quality', why: 'Then: how big the audience was, how much of it you reached, and how many leads were worth having.', weight: 2, metrics: ['universe', 'penetration', 'qualifiedPct', 'cpql'] },
       { tier: 3, title: 'Duration', why: 'Then: how long each ran. Short runs may still be in the platform\'s learning phase.', weight: 1, metrics: ['days', 'leadsPerDay'] },
-      { tier: 4, title: 'Supporting signals', why: 'These explain the numbers above: creative pull, audience fatigue and landing-page friction.', weight: 0.5, metrics: ['cpm', 'ctr', 'cpc', 'frequency', 'lpvRate', 'leadConvRate', 'roas'].filter((k) => k !== primary) },
+      { tier: 4, title: 'Supporting signals', why: 'These explain the numbers above: creative pull, audience fatigue and landing-page friction.', weight: 0.5, metrics: ['cpm', 'ctr', 'cpc', 'frequency', 'lpvRate', 'leadConvRate', 'roas'].filter((k) => k !== primary)                },
     ];
   }
 
-  function dominantObjective(campaigns) {
-    const counts = {};
+  function dominantObjective(campaigns            )               {
+    const counts                         = {};
     for (const c of campaigns) {
       const o = objectiveOf(c) || 'leads';
       counts[o] = (counts[o] || 0) + 1;
     }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'leads';
+    return (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'leads')                ;
   }
 
-  function median(arr) {
+  function median(arr           )                {
     const a = arr.filter(isNum).sort((x, y) => x - y);
     if (!a.length) return null;
     const mid = Math.floor(a.length / 2);
@@ -1052,12 +1066,12 @@ tbody tr:hover > * { background: var(--glass-soft); }
   }
 
   /** Rank campaigns on one metric. Returns {values: {id: v}, best, worst}. */
-  function rankMetric(key, items) {
-    const def = METRIC_DEFS[key] || {};
-    const vals = items.map((it) => ({ id: it.c.id, v: it.m[key] })).filter((x) => isNum(x.v));
-    const res = { key, values: Object.fromEntries(items.map((it) => [it.c.id, it.m[key]])), best: null, worst: null, spread: null };
+  function rankMetric(key           , items               )                                         {
+    const def                     = METRIC_DEFS[key] || {};
+    const vals = items.map((it) => ({ id: it.c.id, v: it.m[key]           })).filter((x) => isNum(x.v));
+    const res             = { key, values: Object.fromEntries(items.map((it) => [it.c.id, it.m[key]])), best: null, worst: null, spread: null };
     if (vals.length < 2 || def.neutral) return res;
-    let sorted;
+    let sorted                             ;
     if (def.band) {
       const mid = (def.band[0] + def.band[1]) / 2;
       sorted = [...vals].sort((a, b) => Math.abs(a.v - mid) - Math.abs(b.v - mid));
@@ -1073,15 +1087,15 @@ tbody tr:hover > * { background: var(--glass-soft); }
   }
 
   /** Two-proportion z-test; returns two-sided p-value or null. */
-  function twoProportionP(x1, n1, x2, n2) {
-    if (![x1, n1, x2, n2].every(isNum) || n1 <= 0 || n2 <= 0) return null;
+  function twoProportionP(x1         , n1         , x2         , n2         )                {
+    if (!isNum(x1) || !isNum(n1) || !isNum(x2) || !isNum(n2) || n1 <= 0 || n2 <= 0) return null;
     const p1 = x1 / n1, p2 = x2 / n2, p = (x1 + x2) / (n1 + n2);
     const se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
     if (se === 0) return null;
     const z = Math.abs(p1 - p2) / se;
     return 2 * (1 - normCdf(z));
   }
-  function normCdf(z) {
+  function normCdf(z        )         {
     // Abramowitz–Stegun approximation
     const t = 1 / (1 + 0.2316419 * z);
     const d = 0.3989423 * Math.exp((-z * z) / 2);
@@ -1089,13 +1103,13 @@ tbody tr:hover > * { background: var(--glass-soft); }
     return 1 - prob;
   }
 
-  function compare(campaigns, settings = DEFAULT_SETTINGS) {
-    const items = campaigns.map((c) => ({ c, m: computeMetrics(c), targeting: classifyTargeting(c, settings), levels: targetLevels(c), dataLevels: dataLevels(c) }));
+  function compare(campaigns            , settings           = DEFAULT_SETTINGS)                {
+    const items                = campaigns.map((c) => ({ c, m: computeMetrics(c), targeting: classifyTargeting(c, settings), levels: targetLevels(c), dataLevels: dataLevels(c) }));
     const objective = dominantObjective(campaigns);
-    const tiers = comparisonTiers(objective).map((t) => ({ ...t, ranks: t.metrics.map((k) => rankMetric(k, items)) }));
+    const tiers         = comparisonTiers(objective).map((t) => ({ ...t, ranks: t.metrics.map((k) => rankMetric(k, items)) }));
 
     // weighted score: winning a metric earns the tier weight, losing costs it
-    const scores = Object.fromEntries(items.map((it) => [it.c.id, 0]));
+    const scores                         = Object.fromEntries(items.map((it) => [it.c.id, 0]));
     for (const t of tiers) for (const r of t.ranks) {
       if (r.best) scores[r.best] += t.weight;
       if (r.worst && r.worst !== r.best) scores[r.worst] -= t.weight / 2;
@@ -1106,37 +1120,36 @@ tbody tr:hover > * { background: var(--glass-soft); }
     const sharedLevels = items.length ? items.map((it) => it.levels).reduce((acc, lv) => acc.filter((x) => lv.includes(x))) : [];
 
     // significance of qualified-% and CTR differences between best and worst
-    const significance = [];
+    const significance                                = [];
     const q = tiers[1].ranks.find((r) => r.key === 'qualifiedPct');
     if (q && q.best && q.worst && q.best !== q.worst) {
-      const a = items.find((it) => it.c.id === q.best).c, b = items.find((it) => it.c.id === q.worst).c;
+      const a = (items.find((it) => it.c.id === q.best)               ).c, b = (items.find((it) => it.c.id === q.worst)               ).c;
       significance.push({ key: 'qualifiedPct', p: twoProportionP(a.qualifiedLeads, a.leads, b.qualifiedLeads, b.leads), best: q.best, worst: q.worst });
     }
     const ctr = rankMetric('ctr', items);
     if (ctr.best && ctr.worst && ctr.best !== ctr.worst) {
-      const a = items.find((it) => it.c.id === ctr.best).c, b = items.find((it) => it.c.id === ctr.worst).c;
+      const a = (items.find((it) => it.c.id === ctr.best)               ).c, b = (items.find((it) => it.c.id === ctr.worst)               ).c;
       significance.push({ key: 'ctr', p: twoProportionP(a.clicks, a.impressions, b.clicks, b.impressions), best: ctr.best, worst: ctr.worst });
     }
 
-    const result = { items, objective, tiers, scores, ranking, mixedObjectives, sharedLevels, significance, settings };
-    result.insights = buildInsights(result);
-    result.commonality = commonAndDifferent(result);
-    result.recommendations = buildRecommendations(result);
-    return result;
+    const partial = { items, objective, tiers, scores, ranking, mixedObjectives, sharedLevels, significance, settings }                 ;
+    partial.insights = buildInsights(partial);
+    partial.commonality = commonAndDifferent(partial);
+    partial.recommendations = buildRecommendations(partial);
+    return partial;
   }
 
   // ---------- Insights (rules engine) ----------
 
-  function buildInsights(r) {
+  function buildInsights(r               )                            {
     const { items, settings } = r;
-    const med = (k) => median(items.map((it) => it.m[k]));
+    const med = (k           )                => median(items.map((it) => it.m[k]));
     const medCpl = med('cpl'), medCpm = med('cpm'), medCtr = med('ctr');
-    const out = {};
+    const out                            = {};
     for (const it of items) {
       const { c, m } = it;
-      const s = [], w = [];
+      const s           = [], w           = [];
       const obj = objectiveOf(c);
-      const name = c.name;
 
       if (isNum(m.cpl) && isNum(medCpl) && items.length > 1) {
         if (m.cpl <= medCpl * 0.8) s.push(`Leads came ${pctDiff(m.cpl, medCpl)} cheaper than the group's middle CPL.`);
@@ -1185,40 +1198,40 @@ tbody tr:hover > * { background: var(--glass-soft); }
     return out;
   }
 
-  function commonAndDifferent(r) {
+  function commonAndDifferent(r               )                               {
     const { items } = r;
     if (items.length < 2) return { common: [], different: [] };
-    const common = [], different = [];
-    const same = (f, label, fmt = (x) => x) => {
+    const common           = [], different           = [];
+    const same = (f                              , label        , fmt                     = (x) => String(x))       => {
       const vals = items.map(f);
       const uniq = [...new Set(vals.map(String))];
       if (uniq.length === 1 && vals[0] !== null && vals[0] !== undefined && vals[0] !== 'unknown') common.push(`${label}: ${fmt(vals[0])}`);
       else different.push(`${label}: ${items.map((it, i) => `${it.c.name} — ${vals[i] === null || vals[i] === undefined ? 'not set' : fmt(vals[i])}`).join('; ')}`);
     };
     same((it) => it.c.platform, 'Platform');
-    same((it) => objectiveOf(it.c), 'Objective', (o) => OBJECTIVES[o]?.label || o);
-    same((it) => it.targeting.type, 'Targeting', (t) => TARGETING[t]);
-    same((it) => it.levels.join(','), 'Funnel levels aimed at', (s) => (s ? s.split(',').map((l) => 'L' + l).join(' + ') : 'not set'));
-    const spreads = [];
+    same((it) => objectiveOf(it.c), 'Objective', (o              ) => OBJECTIVES[o]?.label || o);
+    same((it) => it.targeting.type, 'Targeting', (t               ) => TARGETING[t]);
+    same((it) => it.levels.join(','), 'Funnel levels aimed at', (s        ) => (s ? s.split(',').map((l) => 'L' + l).join(' + ') : 'not set'));
+    const spreads                                  = [];
     for (const t of r.tiers) for (const rk of t.ranks) if (isNum(rk.spread) && rk.spread >= 0.25) spreads.push({ t: t.tier, rk });
     // keep the order of importance, and only the five biggest gaps
-    spreads.sort((a, b) => a.t - b.t || b.rk.spread - a.rk.spread).slice(0, 5).forEach(({ rk }) => {
+    spreads.sort((a, b) => a.t - b.t || (b.rk.spread ?? 0) - (a.rk.spread ?? 0)).slice(0, 5).forEach(({ rk }) => {
       const best = items.find((it) => it.c.id === rk.best), worst = items.find((it) => it.c.id === rk.worst);
-      different.push(`${METRIC_DEFS[rk.key].label}: ${best ? best.c.name : ''} is best, ${worst ? worst.c.name : ''} weakest (${Math.round(rk.spread * 100)}% apart)`);
+      different.push(`${METRIC_DEFS[rk.key]?.label}: ${best ? best.c.name : ''} is best, ${worst ? worst.c.name : ''} weakest (${Math.round((rk.spread ?? 0) * 100)}% apart)`);
     });
     return { common, different };
   }
 
   // ---------- Recommendations ----------
 
-  function buildRecommendations(r) {
+  function buildRecommendations(r               )                                   {
     const { items, settings, ranking } = r;
-    const recs = { improve: {}, newCampaign: [], reallocation: null };
+    const recs                                   = { improve: {}, newCampaign: [], reallocation: null };
     const byId = Object.fromEntries(items.map((it) => [it.c.id, it]));
 
     for (const it of items) {
       const { c, m } = it;
-      const list = [];
+      const list           = [];
       if (isNum(m.frequency) && m.frequency > 3.5) list.push('Refresh the creative (new hook, new visual) and widen the audience to bring frequency under 3.');
       if (isNum(m.ctr) && m.ctr < 0.008) list.push('Test 2–3 new creatives with a clearer first line and a visible offer; keep the one with the best CTR after 3–4 days.');
       if (isNum(m.qualifiedPct) && m.qualifiedPct < settings.targetQualifiedPct) list.push('Add a qualifying question to the lead form (budget, location or timeline) and switch the form to "higher intent" so fewer casual leads get through.');
@@ -1237,7 +1250,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     const lead = byId[ranking[0]];
     if (lead) {
       const lm = lead.m;
-      const obj = objectiveOf(lead.c) || r.objective;
+      const obj               = objectiveOf(lead.c) || r.objective || 'leads';
       recs.newCampaign.push(`Objective: ${OBJECTIVES[obj]?.label || 'Leads'}, the same as the best performer (${lead.c.name}).`);
       if (lead.targeting.type !== 'unknown') recs.newCampaign.push(`Targeting: start ${TARGETING[lead.targeting.type].toLowerCase()}, which worked best here${isNum(lead.c.universe) ? `, with a universe around ${fmtCompact(lead.c.universe)}` : ''}.`);
       recs.newCampaign.push(`Duration: at least 14 days, so the platform finishes learning and you have enough leads to judge quality.`);
@@ -1272,34 +1285,34 @@ tbody tr:hover > * { background: var(--glass-soft); }
 
   // ---------- Formatting ----------
 
-  function fmtMoney(v, currency = 'INR') {
+  function fmtMoney(v                           , currency = 'INR')         {
     if (!isNum(v)) return '—';
-    const opts = { style: 'currency', currency, maximumFractionDigits: v >= 100 ? 0 : 2 };
+    const opts                           = { style: 'currency', currency, maximumFractionDigits: v >= 100 ? 0 : 2 };
     try {
       return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', opts).format(v);
     } catch (e) {
       return currency + ' ' + v.toFixed(2);
     }
   }
-  function fmtPct(v) {
+  function fmtPct(v                           )         {
     if (!isNum(v)) return '—';
     return (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
   }
-  function fmtInt(v) {
+  function fmtInt(v                           )         {
     if (!isNum(v)) return '—';
     return new Intl.NumberFormat('en-IN').format(Math.round(v));
   }
-  function fmtCompact(v) {
+  function fmtCompact(v                           )         {
     if (!isNum(v)) return '—';
     if (v >= 1e7) return (v / 1e7).toFixed(v >= 1e8 ? 0 : 1) + ' crore';
     if (v >= 1e5) return (v / 1e5).toFixed(v >= 1e6 ? 0 : 1) + ' lakh';
     return fmtInt(v);
   }
-  function pctDiff(a, b) {
+  function pctDiff(a        , b        )         {
     return Math.round(Math.abs(a / b - 1) * 100) + '%';
   }
-  function formatMetric(key, v, currency) {
-    const def = METRIC_DEFS[key] || {};
+  function formatMetric(key           , v                           , currency         )         {
+    const def                     = METRIC_DEFS[key] || {};
     switch (def.fmt) {
       case 'money': return fmtMoney(v, currency);
       case 'pct': return fmtPct(v);
@@ -1311,34 +1324,115 @@ tbody tr:hover > * { background: var(--glass-soft); }
 
   // ---------- Exports ----------
 
-  function toRows(result) {
-    const keys = ['spend', 'budget', 'days', 'dailySpend', 'impressions', 'reach', 'frequency', 'cpm', 'clicks', 'ctr', 'cpc', 'views', 'costPerView', 'landingPageViews', 'lpvRate', 'leads', 'cpl', 'leadConvRate', 'qualifiedLeads', 'qualifiedPct', 'cpql', 'conversions', 'cpa', 'roas', 'universe', 'penetration'];
+  function toRows(result               )              {
+    const keys              = ['spend', 'budget', 'days', 'dailySpend', 'impressions', 'reach', 'frequency', 'cpm', 'clicks', 'ctr', 'cpc', 'views', 'costPerView', 'landingPageViews', 'lpvRate', 'leads', 'cpl', 'leadConvRate', 'qualifiedLeads', 'qualifiedPct', 'cpql', 'conversions', 'cpa', 'roas', 'universe', 'penetration'];
     const head = ['Campaign', 'Platform', 'Objective', 'Targeting', 'Start', 'End', 'Score', ...keys.map((k) => (METRIC_DEFS[k] ? METRIC_DEFS[k].label : k))];
-    const rows = [head];
+    const rows              = [head];
     for (const it of result.items) {
-      rows.push([it.c.name, it.c.platform, OBJECTIVES[objectiveOf(it.c)]?.label || '', TARGETING[it.targeting.type], it.c.startDate || '', it.c.endDate || '', result.scores[it.c.id], ...keys.map((k) => (isNum(it.m[k]) ? +it.m[k].toFixed(4) : ''))]);
+      rows.push([it.c.name, it.c.platform, (it.c.objective && OBJECTIVES[it.c.objective                ]?.label) || '', TARGETING[it.targeting.type], it.c.startDate || '', it.c.endDate || '', result.scores[it.c.id], ...keys.map((k) => (isNum(it.m[k]) ? +it.m[k].toFixed(4) : ''))]);
     }
     return rows;
   }
 
-  function toCsv(result) {
-    const esc = (v) => {
+  function toCsv(result               )         {
+    const esc = (v         )         => {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     return toRows(result).map((r) => r.map(esc).join(',')).join('\n');
   }
 
+  // ---------- Campaign list: search, status filter, sort, totals, export ----------
+  const isoStart = (c          )         => String(c.startedAt || c.startDate || '').slice(0, 10);
+  /** 'active' = delivering now; 'inactive' = paused, archived, finished, in review…; 'unknown' = no status (e.g. a CSV import). */
+  function statusKind(c                   )                                    {
+    const s = String(c.status == null ? '' : c.status).trim().toUpperCase();
+    return !s ? 'unknown' : s === 'ACTIVE' ? 'active' : 'inactive';
+  }
+  /**
+   * Filters and sorts the campaign list. `q` matches the name (and, for ad sets and ads, the parent names).
+   * `sort`: 'default' keeps the given order, 'newest' / 'oldest' by start date (undated last), 'name' A–Z.
+   * Counts ignore the status filter so the buttons can show how many each choice would give.
+   */
+  function listView(items            , opts                        )                 {
+    const o = opts || {};
+    const terms = String(o.q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const status               = o.status === 'active' || o.status === 'inactive' ? o.status : 'all';
+    const sort           = o.sort === 'newest' || o.sort === 'oldest' || o.sort === 'name' ? o.sort : 'default';
+    const hay = (c          )         => [c.name, c.adsetName, c.campaignName].filter(Boolean).join(' ').toLowerCase();
+    const searched = items.filter((c) => { const h = hay(c); return terms.every((t) => h.includes(t)); });
+    const counts = { all: searched.length, active: 0, inactive: 0 };
+    for (const c of searched) { const k = statusKind(c); if (k === 'active') counts.active++; else if (k === 'inactive') counts.inactive++; }
+    const out = status === 'all' ? searched.slice() : searched.filter((c) => statusKind(c) === status);
+    if (sort !== 'default') {
+      const byName = (a          , b          )         => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
+      const rank = new Map(out.map((c, i) => [c, i]         ));
+      const pos = (c          )         => rank.get(c) ?? 0;
+      out.sort((a, b) => {
+        if (sort === 'name') return byName(a, b) || pos(a) - pos(b);
+        const da = isoStart(a), db = isoStart(b);
+        if (!da !== !db) return da ? -1 : 1;
+        if (da !== db) return sort === 'newest' ? (da < db ? 1 : -1) : (da < db ? -1 : 1);
+        return pos(a) - pos(b);
+      });
+    }
+    return { items: out, counts, total: items.length, anyStatus: items.some((c) => statusKind(c) !== 'unknown') };
+  }
+
+  /**
+   * Adds up what the list is showing. Cost per lead and qualified % only use the rows that track leads
+   * (and, for qualified %, qualified leads), so a row without lead data can't distort them.
+   */
+  function listTotals(items            )             {
+    const t             = { count: items.length, spend: 0, impressions: 0, clicks: 0, leads: 0, qualifiedLeads: 0, cpl: null, qualifiedPct: null };
+    let leadSpend = 0, qLeads = 0, qBase = 0;
+    for (const c of items) {
+      if (isNum(c.spend)) t.spend += c.spend;
+      if (isNum(c.impressions)) t.impressions += c.impressions;
+      if (isNum(c.clicks)) t.clicks += c.clicks;
+      if (isNum(c.leads) && c.leads > 0) {
+        t.leads += c.leads;
+        if (isNum(c.spend)) leadSpend += c.spend;
+        if (isNum(c.qualifiedLeads)) { qLeads += c.qualifiedLeads; qBase += c.leads; }
+      }
+    }
+    t.qualifiedLeads = qLeads;
+    t.cpl = div(leadSpend, t.leads);
+    t.qualifiedPct = div(qLeads, qBase);
+    return t;
+  }
+
+  /** The list as CSV rows (what is on screen, in that order), with a totals row at the end. */
+  function listToCsv(items            )         {
+    const esc = (v         )         => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const num = (v                           )                  => (isNum(v) ? +v.toFixed(4) : '');
+    const LEVEL                         = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
+    const head = ['Name', 'Level', 'Campaign', 'Ad set', 'Status', 'Started', 'Last active day', 'Platform', 'Objective', 'Spend', 'Impressions', 'Clicks', 'Leads', 'Cost per lead', 'Qualified leads', 'Qualified %'];
+    const rows              = [head];
+    for (const c of items) {
+      const m = computeMetrics(c);
+      const o = objectiveOf(c);
+      rows.push([c.name, LEVEL[c.level || ''] || '', c.campaignName || '', c.adsetName || '', c.status || '', isoStart(c), c.endDate || '', c.platform || '', o ? OBJECTIVES[o].label : '', num(m.spend), num(m.impressions), num(m.clicks), num(m.leads), num(m.cpl), num(m.qualifiedLeads), num(m.qualifiedPct)]);
+    }
+    const t = listTotals(items);
+    rows.push([`Total (${t.count})`, '', '', '', '', '', '', '', '', num(t.spend), num(t.impressions), num(t.clicks), num(t.leads), num(t.cpl), num(t.qualifiedLeads), num(t.qualifiedPct)]);
+    return rows.map((r) => r.map(esc).join(',')).join('\n');
+  }
+
   const api = {
-    FUNNEL_LEVELS, OBJECTIVES, PLATFORMS, TARGETING, DEFAULT_SETTINGS, FIELDS, METRIC_DEFS,
+    FUNNEL_LEVELS, OBJECTIVES, PLATFORMS, TARGETING, DEFAULT_SETTINGS, FIELDS, METRIC_DEFS: METRIC_DEFS                                ,
     parseNumber, parseDate, mapColumns, rowsToCampaigns, normaliseCampaign, newId,
     durationDays, computeMetrics, targetLevels, dataLevels, classifyTargeting, missingInputs,
     comparisonTiers, compare, rankMetric, twoProportionP, median,
     fmtMoney, fmtPct, fmtInt, fmtCompact, formatMetric, toCsv, toRows, objectiveOf, isNum,
-  };
+    statusKind, listView, listTotals, listToCsv,
+  }           ;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CampaignCore = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(typeof window !== 'undefined' ? window : (globalThis                              ));
 
 </script>
 <script>
@@ -1980,7 +2074,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
 </script>
 <script>
 /* Example data for a fictional business ("Lakeside Yoga Studio"). Not real campaigns. */
-(function (root) {
+(function (root                         ) {
   const SAMPLE_CSV = [
     'Campaign name,Platform,Objective,Reporting starts,Reporting ends,Budget,Amount spent (INR),Impressions,Reach,Link clicks,Landing page views,Leads,Qualified leads,Audience size,Targeting',
     'Example – Open audience lead form,Meta,Leads,2026-08-01,2026-08-21,60000,58200,512000,201000,6140,,412,78,24000000,Advantage+ audience; Mumbai 25-45',
@@ -1990,11 +2084,11 @@ tbody tr:hover > * { background: var(--glass-soft); }
   ].join('\n');
   root.SAMPLE_CSV = SAMPLE_CSV;
   if (typeof module !== 'undefined' && module.exports) module.exports = { SAMPLE_CSV };
-})(typeof window !== 'undefined' ? window : globalThis);
+})(typeof window !== 'undefined' ? window : (globalThis                           ));
 
 </script>
 <script>
-/* Campaign Analyser — browser UI. Depends on core.js (CampaignCore), charts.ts (CampaignCharts), sample.js (SAMPLE_CSV) and SheetJS (XLSX). */
+/* Campaign Analyser — browser UI. Depends on core.ts (CampaignCore), charts.ts (CampaignCharts), sample.ts (SAMPLE_CSV) and SheetJS (XLSX). */
 (function () {
   'use strict';
 
@@ -2023,6 +2117,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
                                                                                                      
                                                                                                            
                                                          
+                           
    
   class ApiError extends Error {
     status = 0;
@@ -2054,6 +2149,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     viewer: null,          // a shared, read-only snapshot
     trendMetric: null,
     compareView: 'overview',
+    listView: { q: '', status: 'all', sort: 'default' },  // list tools: search text (not saved), status filter and sort (saved)
   };
   let editorDraft                  = null;
 
@@ -2064,7 +2160,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
       const files                   = state.source === 'files' ? { campaigns: state.campaigns, selected: [...state.selected], isExample: state.isExample } : state.fileStash;
       const m = state.meta;
       const metaPrefs = { accountId: m.accountId, level: m.level, preset: m.preset, since: m.since, until: m.until, selected: state.source === 'meta' ? [...state.selected] : m.selectedIds };
-      localStorage.setItem(STORE_KEY, JSON.stringify({ files, settings: state.settings, tab: state.tab, source: state.source, metaPrefs, compareView: state.compareView }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ files, settings: state.settings, tab: state.tab, source: state.source, metaPrefs, compareView: state.compareView, listView: { status: state.listView.status, sort: state.listView.sort } }));
     } catch (e) { /* storage unavailable: fine */ }
   }
   function load()          {
@@ -2080,6 +2176,10 @@ tbody tr:hover > * { background: var(--glass-soft); }
       state.tab = d.tab || 'campaigns';
       state.wantSource = d.source || 'files';
       if (VIEWS.some(([v]) => v === d.compareView)) state.compareView = d.compareView;
+      if (d.listView) {
+        if (['all', 'active', 'inactive'].includes(d.listView.status)) state.listView.status = d.listView.status;
+        if (['default', 'newest', 'oldest', 'name'].includes(d.listView.sort)) state.listView.sort = d.listView.sort;
+      }
       if (d.metaPrefs) {
         const p = d.metaPrefs;
         Object.assign(state.meta, { accountId: p.accountId || null, level: p.level || 'campaign', preset: p.preset || 'last30', since: p.since || null, until: p.until || null, selectedIds: p.selected || [], pendingSelection: (p.selected || []).length ? p.selected : null });
@@ -2233,7 +2333,47 @@ tbody tr:hover > * { background: var(--glass-soft); }
       host.innerHTML = `<div class="empty"><p class="empty-title">No campaigns yet</p><p>Upload an export from Meta Ads Manager or Google Ads, add a campaign by hand, or load the example data to see how it works.</p></div>`;
       return;
     }
-    const rows = state.campaigns.map((c) => {
+    host.innerHTML = '<div id="list-tools"></div><div id="list-body"></div>';
+    renderListTools();
+    renderListBody();
+  }
+
+  const startOf = (c          )         => String(c.startedAt || c.startDate || '').slice(0, 10);
+  const SORTS                       = [['newest', 'Newest start first'], ['oldest', 'Oldest start first'], ['name', 'Name A–Z']];
+
+  /** Search box, status buttons and sort menu. Built once per list render so typing never loses focus. */
+  function renderListTools()       {
+    const lv = state.listView;
+    const def = state.source === 'meta' ? 'Biggest spend first' : 'As imported';
+    $('#list-tools').innerHTML = `<div class="list-tools">
+      <label class="lt-search" for="l-q"><span class="sr">Search by name</span><input type="search" id="l-q" placeholder="Search by name…" value="${esc(lv.q)}" autocomplete="off" spellcheck="false"></label>
+      <div class="seg" id="l-status" role="group" aria-label="Status">${([['all', 'All'], ['active', 'Active'], ['inactive', 'Inactive']]                            ).map(([v, l]) => `<button type="button" data-lstatus="${v}" aria-pressed="${lv.status === v}">${l} <span class="n" data-lcount="${v}"></span></button>`).join('')}</div>
+      <button type="button" class="btn small ghost" data-lcsv="1" title="Download what is shown, in this order, with a totals row">Export CSV</button>
+      <span id="list-dl-status" role="status"></span>
+      <label class="lt-sort" for="l-sort">Sort<select id="l-sort"><option value="default" ${lv.sort === 'default' ? 'selected' : ''}>${def}</option>${SORTS.map(([v, l]) => `<option value="${v}" ${lv.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div>`;
+  }
+
+  /** Keeps the status counts and pressed state current without rebuilding the search box. */
+  function syncListTools(view                )       {
+    const box = $('#l-status');
+    if (!box) return;
+    box.hidden = !view.anyStatus;   // a CSV with no status column has nothing to filter on
+    for (const k of ['all', 'active', 'inactive']                  ) { const n = $(`[data-lcount="${k}"]`, box); if (n) n.textContent = String(view.counts[k]); }
+    for (const b of $$('[data-lstatus]', box)) b.setAttribute('aria-pressed', String(b.dataset.lstatus === state.listView.status));
+  }
+
+  function renderListBody()       {
+    const view = C.listView(state.campaigns, state.listView);
+    syncListTools(view);
+    const body = $('#list-body');
+    if (!view.items.length) {
+      body.innerHTML = `<div class="empty"><p class="empty-title">No match</p><p>${state.listView.q.trim() ? `Nothing here matches “${esc(state.listView.q.trim())}”${state.listView.status !== 'all' ? ` among ${state.listView.status} ones` : ''}.` : `None of these are ${state.listView.status}.`}</p><button class="btn small" data-lclear="1">Clear search and filter</button></div>`;
+      return;
+    }
+    const tot = C.listTotals(view.items);
+    const hiddenSel = [...state.selected].filter((id) => !view.items.some((c) => c.id === id)).length;
+    const rows = view.items.map((c) => {
       const m = C.computeMetrics(c);
       const t = C.classifyTargeting(c, state.settings);
       const miss = gapsFor(c);
@@ -2244,7 +2384,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
       const thumb = c.thumbnailUrl ? `<img class="thumb" src="${esc(c.thumbnailUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '';
       return `<tr>
         <td class="sel"><input type="checkbox" id="sel-${esc(c.id)}" data-select="${esc(c.id)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} aria-label="Compare ${esc(c.name)}"></td>
-        <th scope="row" class="cname"><div class="cn-row">${thumb}<div><span class="dot s${checked ? colorSlot(c.id) : 0}" aria-hidden="true"></span>${esc(c.name)}${status}<span class="sub">${parent ? esc(parent) + ' · ' : ''}${esc(c.platform || 'Other')} · ${esc(objLabel(c.objective))}${m.days ? ' · ' + m.days + ' days' : ''}</span></div></div></th>
+        <th scope="row" class="cname"><div class="cn-row">${thumb}<div><span class="dot s${checked ? colorSlot(c.id) : 0}" aria-hidden="true"></span>${esc(c.name)}${status}<span class="sub">${parent ? esc(parent) + ' · ' : ''}${esc(c.platform || 'Other')} · ${esc(objLabel(c.objective))}${m.days ? ' · ' + m.days + ' days' : ''}${startOf(c) ? ' · started ' + fmtDay(startOf(c)) : ''}</span></div></div></th>
         <td><span class="chip t-${t.type}" title="${esc(t.reason)}">${esc(tLabel(t.type))}</span></td>
         <td>${funnelChips(c)}</td>
         <td class="num">${money(m.spend)}</td>
@@ -2254,10 +2394,11 @@ tbody tr:hover > * { background: var(--glass-soft); }
         <td class="act">${miss.length ? `<button class="btn small warn" data-edit="${esc(c.id)}">Fill ${miss.length} gap${miss.length === 1 ? '' : 's'}</button>` : `<button class="btn small ghost" data-edit="${esc(c.id)}">Edit</button>`}</td>
       </tr>`;
     }).join('');
-    host.innerHTML = `<div class="table-wrap"><table class="ctable">
+    body.innerHTML = `<div class="table-wrap"><table class="ctable">
       <thead><tr><th class="sel"><span class="sr">Compare</span></th><th>Campaign</th><th>Targeting</th><th>Funnel</th><th class="num">Spend</th><th class="num">Leads</th><th class="num">CPL</th><th class="num">Qualified</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
-      <p class="hint">${state.source === 'meta' && state.meta.range ? `Showing ${LEVEL_LABELS[state.meta.level].toLowerCase()} that spent between ${fmtDay(state.meta.range.since)} and ${fmtDay(state.meta.range.until)}, biggest first. ` : ''}Tick up to ${MAX_COMPARE}, then open <b>Compare</b>. Funnel chips: <span class="lv aim">L4</span> aimed at, <span class="lv data">L3</span> has data only.</p>`;
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="totals" title="Added up across what is shown. Cost per lead and qualified % only use rows that track leads."><td></td><th scope="row">Total · ${tot.count} shown</th><td></td><td></td><td class="num">${money(tot.spend)}</td><td class="num">${C.fmtInt(tot.leads)}</td><td class="num">${money(tot.cpl)}</td><td class="num">${C.fmtPct(tot.qualifiedPct)}</td><td></td></tr></tfoot></table></div>
+      <p class="hint">${state.source === 'meta' && state.meta.range ? `Showing ${LEVEL_LABELS[state.meta.level].toLowerCase()} that spent between ${fmtDay(state.meta.range.since)} and ${fmtDay(state.meta.range.until)}${state.listView.sort === 'default' ? ', biggest first' : ''}. ` : ''}${hiddenSel ? `${hiddenSel} ticked ${hiddenSel === 1 ? 'item is' : 'items are'} hidden by the search or filter and still count for Compare. ` : ''}Tick up to ${MAX_COMPARE}, then open <b>Compare</b>. Funnel chips: <span class="lv aim">L4</span> aimed at, <span class="lv data">L3</span> has data only.</p>`;
   }
 
   // ---------- Editor ----------
@@ -2586,7 +2727,7 @@ tbody tr:hover > * { background: var(--glass-soft); }
     const owner = state.server && state.meta.me && !state.viewer;
     const actions = `<div class="cmp-actions">
         ${owner ? `<span class="owner-only" style="display:contents">${state.source === 'meta' ? '<button class="btn ghost small" data-act="save-cmp">Save</button>' : ''}<button class="btn ghost small" data-act="share">Share</button></span>` : ''}
-        <details class="menu"><summary class="btn small">Download</summary><div class="menu-list" role="group" aria-label="Download"><button data-dl="html">Report (HTML)</button><button data-dl="csv">Data (CSV)</button><button data-dl="xlsx">Workbook (XLSX)</button></div></details>
+        <details class="menu"><summary class="btn small">Download</summary><div class="menu-list" role="group" aria-label="Download"><button data-dl="pdf">Report (PDF)</button><button data-dl="html">Report (HTML)</button><button data-dl="csv">Data (CSV)</button><button data-dl="xlsx">Workbook (XLSX)</button></div></details>
         <span id="dl-status" role="status"></span></div>`;
     const forms = owner ? `<form class="inline-form owner-only" id="save-cmp-row" hidden><label class="sr" for="save-cmp-name">Name</label><input id="save-cmp-name" maxlength="120" placeholder="Name this comparison, e.g. Lead forms vs lookalike" required><button class="btn small" type="submit">Save</button><button class="btn ghost small" type="button" data-act="save-cmp-cancel">Cancel</button></form>
         <div class="share-out owner-only" id="share-out" hidden></div>` : '';
@@ -2631,8 +2772,8 @@ tbody tr:hover > * { background: var(--glass-soft); }
       <p class="muted">To save as PDF: open this file in a browser and use Print → Save as PDF.</p></body></html>`;
   }
 
-  async function offerFile(filename        , data               , mime        )                {
-    const status = $('#dl-status');
+  async function offerFile(filename        , data               , mime        , statusSel = '#dl-status')                {
+    const status = $(statusSel);
     status.textContent = '';
     try {
       const dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
@@ -2657,10 +2798,43 @@ tbody tr:hover > * { background: var(--glass-soft); }
     status.textContent = 'Download started.';
   }
 
+  /** The campaign list as it is on screen (filter, search and sort applied), plus a totals row. */
+  function exportList()       {
+    const view = C.listView(state.campaigns, state.listView);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const what = state.source === 'meta' ? LEVEL_LABELS[state.meta.level].toLowerCase().replace(/ /g, '-') : 'campaigns';
+    if (!view.items.length) { $('#list-dl-status').textContent = 'Nothing to export with this search and filter.'; return; }
+    offerFile(`${what}-${stamp}.csv`, C.listToCsv(view.items), 'text/csv', '#list-dl-status');
+  }
+
+  /**
+   * PDF through the browser's own print dialog (Save as PDF): the text stays selectable and the charts stay sharp.
+   * The report is loaded into a hidden frame so the app page itself is never printed.
+   */
+  function printReport(r               )       {
+    const status = $('#dl-status');
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+    frame.srcdoc = reportHtml(r).replace('To save as PDF: open this file in a browser and use Print → Save as PDF.', '');
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        status.textContent = 'In the print window, choose Save as PDF.';
+      } catch (e) {
+        status.textContent = 'Printing is blocked here. Download the HTML report and print it from your browser.';
+      }
+      setTimeout(() => frame.remove(), 60000);
+    };
+    document.body.appendChild(frame);
+  }
+
   function download(kind        )       {
     const r = state.lastResult;
     if (!r) return;
     const stamp = new Date().toISOString().slice(0, 10);
+    if (kind === 'pdf') { printReport(r); return; }
     if (kind === 'html') offerFile(`campaign-report-${stamp}.html`, reportHtml(r), 'text/html');
     if (kind === 'csv') offerFile(`campaign-comparison-${stamp}.csv`, C.toCsv(r), 'text/csv');
     if (kind === 'xlsx') {
@@ -3148,6 +3322,9 @@ tbody tr:hover > * { background: var(--glass-soft); }
       const d = t.dataset;
       if (d.source) { switchSource(d.source          ); return; }
       if (d.level) { state.meta.level = d.level         ; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
+      if (d.lstatus) { state.listView.status = d.lstatus                ; save(); renderListBody(); return; }
+      if (d.lcsv) { exportList(); return; }
+      if (d.lclear) { state.listView.q = ''; state.listView.status = 'all'; save(); renderListTools(); renderListBody(); return; }
       if (d.act) { handleMetaAction(t); return; }
       if (d.history) { setHistory(Number(d.history)); return; }
       if (d.themeSet) { setTheme(d.themeSet === 'dark' ? 'dark' : 'light'); return; }
@@ -3188,9 +3365,14 @@ tbody tr:hover > * { background: var(--glass-soft); }
     document.addEventListener('pointerdown', (e) => {
       for (const m of $$                    ('details.menu[open]')) if (!m.contains(e.target        )) m.removeAttribute('open');
     });
+    document.addEventListener('input', (e) => {
+      const el = e.target                    ;
+      if (el.id === 'l-q') { state.listView.q = el.value; renderListBody(); }
+    });
     document.addEventListener('change', (e) => {
       const el = e.target                    ;
       const tid = el.id;
+      if (tid === 'l-sort') { state.listView.sort = el.value            ; save(); renderListBody(); return; }
       if (tid === 'm-autosync') { setAutoSync(el.checked); return; }
       if (tid === 'm-history') { setHistory(Number(el.value)); return; }
       if (tid === 'm-account') { state.meta.accountId = el.value; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }

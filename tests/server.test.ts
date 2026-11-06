@@ -1,23 +1,27 @@
 // End-to-end: the real server against the simulated Meta API.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { startMetaMock, DEMO } = require('../mock/meta-mock.js');
-const { loadConfig } = require('../server/config.js');
-const { createApp } = require('../server/app.js');
-const { createFakeClient } = require('./fake-libsql.js');
+import type { MockApi } from '../mock/meta-mock.ts';
+import type { ConfigApi } from '../server/config.ts';
+import type { AppApi } from '../server/app.ts';
+import type { FakeLibsqlApi } from './fake-libsql.ts';
+const test: typeof import('node:test') = require('node:test');
+const assert: typeof import('node:assert') = require('node:assert');
+const fs: typeof import('node:fs') = require('node:fs');
+const os: typeof import('node:os') = require('node:os');
+const path: typeof import('node:path') = require('node:path');
+const crypto: typeof import('node:crypto') = require('node:crypto');
+const { startMetaMock, DEMO }: MockApi = require('../mock/meta-mock.ts');
+const { loadConfig }: ConfigApi = require('../server/config.ts');
+const { createApp }: AppApi = require('../server/app.ts');
+const { createFakeClient }: FakeLibsqlApi = require('./fake-libsql.ts');
 
 const quiet = { info() {}, warn() {}, error() {} };
 
 // Every server test runs twice: on node:sqlite (local) and on the libSQL path (Turso on Vercel).
 const DRIVERS = ['sqlite', 'libsql'];
 let DRIVER = 'sqlite';
-const dtest = (name, fn) => DRIVERS.forEach((d) => test(`[${d}] ${name}`, async () => { DRIVER = d; await fn(); }));
+const dtest = (name: string, fn: () => Promise<void>): void => DRIVERS.forEach((d) => test(`[${d}] ${name}`, async () => { DRIVER = d; await fn(); }));
 
-async function setup({ failEvery = 0, stepMs } = {}) {
+async function setup({ failEvery = 0, stepMs }: { failEvery?: number; stepMs?: number } = {}) {
   const mock = await startMetaMock({ failEvery });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ca-test-'));
   const config = loadConfig({ DEMO: '1', DATA_DIR: dir, PORT: '0', CRON_SECRET: 'test-cron-secret' });
@@ -27,25 +31,26 @@ async function setup({ failEvery = 0, stepMs } = {}) {
   if (stepMs !== undefined) config.syncStepMs = stepMs;
   if (DRIVER === 'libsql') config.db = { client: createFakeClient() };
   const app = await createApp(config, { sleep: async () => {}, log: quiet });
-  await new Promise((r) => app.server.listen(0, '127.0.0.1', r));
-  config.baseUrl = `http://127.0.0.1:${app.server.address().port}`;
-  const jar = {};
-  const call = async (method, p, { body, csrf, raw } = {}) => {
-    const headers = { cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') };
+  await new Promise<void>((r) => { app.server.listen(0, '127.0.0.1', () => r()); });
+  config.baseUrl = `http://127.0.0.1:${(app.server.address() as import('node:net').AddressInfo).port}`;
+  const jar: Record<string, string> = {};
+  // Returns the raw Response when `raw` is set, otherwise { status, body, headers } with the body parsed.
+  const call = async (method: string, p: string, { body, csrf, raw }: { body?: unknown; csrf?: string; raw?: boolean } = {}): Promise<any> => {
+    const headers: Record<string, string> = { cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') };
     if (body) headers['content-type'] = 'application/json';
     if (csrf) headers['x-csrf-token'] = csrf;
     const res = await fetch(p.startsWith('http') ? p : config.baseUrl + p, { method, headers, body: body ? JSON.stringify(body) : undefined, redirect: 'manual' });
-    for (const c of res.headers.getSetCookie()) { const [kv] = c.split(';'); const i = kv.indexOf('='); jar[kv.slice(0, i)] = kv.slice(i + 1); }
+    for (const c of res.headers.getSetCookie()) { const kv = c.split(';')[0] as string; const i = kv.indexOf('='); jar[kv.slice(0, i)] = kv.slice(i + 1); }
     if (raw) return res;
     const text = await res.text();
-    let json; try { json = JSON.parse(text); } catch { json = text; }
+    let json: any; try { json = JSON.parse(text); } catch { json = text; }
     return { status: res.status, body: json, headers: res.headers };
   };
   async function signIn() {
     const start = await call('GET', '/auth/meta/start', { raw: true });
     assert.strictEqual(start.status, 302);
-    const dialog = await fetch(start.headers.get('location'), { redirect: 'manual' });
-    const back = await call('GET', dialog.headers.get('location'), { raw: true });
+    const dialog = await fetch(start.headers.get('location') as string, { redirect: 'manual' });
+    const back = await call('GET', dialog.headers.get('location') as string, { raw: true });
     assert.strictEqual(back.headers.get('location'), '/#connected');
     return (await call('GET', '/api/me')).body;
   }
@@ -53,7 +58,7 @@ async function setup({ failEvery = 0, stepMs } = {}) {
   return { app, mock, config, call, signIn, jar, done };
 }
 
-const isoDaysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+const isoDaysAgo = (n: number): string => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
 dtest('sign in, sync and read campaigns, ad sets and ads', async () => {
   const t = await setup();
@@ -64,7 +69,7 @@ dtest('sign in, sync and read campaigns, ad sets and ads', async () => {
     assert.ok(me.csrf);
     // The token is stored encrypted, never in plain text.
     const row = await t.app.db.get('SELECT token_enc FROM users WHERE id = ?', me.id);
-    assert.ok(row.token_enc && !row.token_enc.includes(DEMO.longToken));
+    assert.ok(row!.token_enc && !row!.token_enc.includes(DEMO.longToken));
 
     const accts = (await t.call('GET', '/api/accounts')).body.accounts;
     assert.strictEqual(accts.length, 1);
@@ -76,7 +81,7 @@ dtest('sign in, sync and read campaigns, ad sets and ads', async () => {
 
     const camp = (await t.call('GET', `/api/accounts/${id}/entities?level=campaign&since=${isoDaysAgo(29)}&until=${isoDaysAgo(0)}`)).body;
     assert.strictEqual(camp.campaigns.length, 5);
-    const adv = camp.campaigns.find((c) => /Advantage/.test(c.name));
+    const adv = camp.campaigns.find((c: Row) => /Advantage/.test(c.name));
     assert.strictEqual(adv.objective, 'leads');
     assert.ok(adv.leads > 0 && adv.spend > 0 && adv.reach > 0);
     assert.strictEqual(adv.landingPageViews, undefined, 'instant-form campaign has no landing page');
@@ -84,19 +89,21 @@ dtest('sign in, sync and read campaigns, ad sets and ads', async () => {
     assert.ok(adv.universe > 20000000, 'audience size from the delivery estimate');
     assert.match(adv.targetingNotes, /Advantage\+/);
     assert.ok(adv.daily.length >= 28);
-    const wellness = camp.campaigns.find((c) => /Wellness/.test(c.name));
+    const wellness = camp.campaigns.find((c: Row) => /Wellness/.test(c.name));
     assert.ok(wellness.budget > 0, 'ad set budgets add up to a campaign budget');
-    const lal = camp.campaigns.find((c) => /Lookalike/.test(c.name));
+    const lal = camp.campaigns.find((c: Row) => /Lookalike/.test(c.name));
     assert.ok(lal.landingPageViews > 0 && lal.leads > 0);
-    const reachCampaign = camp.campaigns.find((c) => /Reach/.test(c.name));
+    assert.ok(camp.campaigns.every((c: Row) => /^\d{4}-\d{2}-\d{2}$/.test(c.startedAt) && c.status), 'every campaign has a start date and a status');
+    const reachCampaign = camp.campaigns.find((c: Row) => /Reach/.test(c.name));
     assert.strictEqual(reachCampaign.objective, 'awareness');
 
     const adsets = (await t.call('GET', `/api/accounts/${id}/entities?level=adset&since=${isoDaysAgo(29)}&until=${isoDaysAgo(0)}`)).body.campaigns;
     assert.strictEqual(adsets.length, 7);
-    assert.ok(adsets.every((a) => a.campaignName));
+    assert.ok(adsets.every((a: Row) => a.campaignName));
     const ads = (await t.call('GET', `/api/accounts/${id}/entities?level=ad&since=${isoDaysAgo(29)}&until=${isoDaysAgo(0)}`)).body.campaigns;
     assert.strictEqual(ads.length, 8);
-    assert.ok(ads.every((a) => a.thumbnailUrl && a.adsetName));
+    assert.ok(ads.every((a: Row) => a.thumbnailUrl && a.adsetName));
+    assert.ok(ads.every((a: Row) => /^\d{4}-\d{2}-\d{2}$/.test(a.startedAt)), 'ads fall back to their first day with spend');
 
     // A second sync only re-fetches the last few days.
     const before = t.mock.stats.calls;
@@ -117,11 +124,11 @@ dtest('manual inputs, saved comparisons, share links, usage', async () => {
 
     const put = await t.call('PUT', `/api/entities/${target.id}/manual`, { body: { qualifiedLeads: 42, universe: 'abc', targeting: 'focused', evil: 'x' }, csrf: me.csrf });
     assert.deepStrictEqual(put.body.manual, { qualifiedLeads: 42, targeting: 'focused' });
-    const after = (await t.call('GET', `/api/accounts/${id}/entities?${q}`)).body.campaigns.find((c) => c.id === target.id);
+    const after = (await t.call('GET', `/api/accounts/${id}/entities?${q}`)).body.campaigns.find((c: Row) => c.id === target.id);
     assert.strictEqual(after.qualifiedLeads, 42);
     assert.strictEqual(after.targeting, 'focused');
     await t.call('PUT', `/api/entities/${target.id}/manual`, { body: { targeting: null }, csrf: me.csrf });
-    assert.strictEqual((await t.call('GET', `/api/accounts/${id}/entities?${q}`)).body.campaigns.find((c) => c.id === target.id).targeting, 'auto');
+    assert.strictEqual((await t.call('GET', `/api/accounts/${id}/entities?${q}`)).body.campaigns.find((c: Row) => c.id === target.id).targeting, 'auto');
 
     const saved = await t.call('POST', '/api/comparisons', { body: { name: 'Lead forms vs lookalike', accountId: id, level: 'campaign', preset: 'last30', entityIds: [list[0].id, list[1].id] }, csrf: me.csrf });
     assert.strictEqual(saved.status, 200);
@@ -162,7 +169,7 @@ dtest('Meta data-deletion callback removes everything for that user', async () =
     const me = await t.signIn();
     const acct = (await t.call('GET', '/api/accounts')).body.accounts[0].id;
     await t.call('POST', `/api/accounts/${acct}/sync`, { body: {}, csrf: me.csrf });
-    assert.ok((await t.app.db.get('SELECT COUNT(*) AS n FROM daily')).n > 0);
+    assert.ok((await t.app.db.get('SELECT COUNT(*) AS n FROM daily'))!.n > 0);
     const payload = Buffer.from(JSON.stringify({ user_id: me.id, algorithm: 'HMAC-SHA256' })).toString('base64url');
     const sig = crypto.createHmac('sha256', DEMO.appSecret).update(payload).digest('base64url');
     const bad = await fetch(`${t.config.baseUrl}/meta/data-deletion`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `signed_request=xx.${payload}` });
@@ -170,8 +177,8 @@ dtest('Meta data-deletion callback removes everything for that user', async () =
     const res = await fetch(`${t.config.baseUrl}/meta/data-deletion`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `signed_request=${sig}.${payload}` });
     const body = await res.json();
     assert.ok(body.confirmation_code && body.url.includes('/meta/deletion-status'));
-    assert.strictEqual((await t.app.db.get('SELECT COUNT(*) AS n FROM users')).n, 0);
-    assert.strictEqual((await t.app.db.get('SELECT COUNT(*) AS n FROM daily')).n, 0, 'synced data removed too');
+    assert.strictEqual((await t.app.db.get('SELECT COUNT(*) AS n FROM users'))!.n, 0);
+    assert.strictEqual((await t.app.db.get('SELECT COUNT(*) AS n FROM daily'))!.n, 0, 'synced data removed too');
     assert.strictEqual((await t.call('GET', '/api/me')).status, 401);
     assert.strictEqual((await fetch(body.url)).status, 200);
   } finally { await t.done(); }
@@ -183,7 +190,7 @@ dtest('expired Meta token asks the user to reconnect', async () => {
     const me = await t.signIn();
     const id = (await t.call('GET', '/api/accounts')).body.accounts[0].id;
     // Corrupt the stored token so Meta rejects it (code 190).
-    const S = require('../server/security.js');
+    const S = require('../server/security.ts');
     await t.app.db.run('UPDATE users SET token_enc = ? WHERE id = ?', S.encrypt('revoked-token', t.config.key), me.id);
     const r = await t.call('POST', `/api/accounts/${id}/sync`, { body: { wait: true }, csrf: me.csrf });
     assert.strictEqual(r.body.account.syncState, 'reconnect');
@@ -201,7 +208,7 @@ dtest('security: share snapshots are whitelisted, $ in names is safe, scripts ne
     ];
     const share = await t.call('POST', '/api/shares', { body: { campaigns: evil, settings: { currency: 'INR<script>' } }, csrf: me.csrf });
     const row = await t.app.db.get('SELECT snapshot FROM shares WHERE token = ?', share.body.share.token);
-    const snap = JSON.parse(row.snapshot);
+    const snap = JSON.parse(row!.snapshot);
     assert.strictEqual(snap.campaigns[0].id, 'item1', 'unsafe id replaced');
     assert.strictEqual(snap.campaigns[0].thumbnailUrl, undefined);
     assert.strictEqual(snap.campaigns[0].onclick, undefined);
@@ -211,10 +218,10 @@ dtest('security: share snapshots are whitelisted, $ in names is safe, scripts ne
     const html = await res.text();
     assert.ok(html.length < 400000, 'page not duplicated by $ patterns');
     assert.strictEqual((html.match(/window\.__SHARE__ = /g) || []).length, 1);
-    const csp = res.headers.get('content-security-policy');
+    const csp = res.headers.get('content-security-policy') as string;
     assert.match(csp, /script-src 'nonce-[^']+'/);
     assert.ok(!/script-src[^;]*unsafe-inline/.test(csp));
-    const nonce = csp.match(/nonce-([^']+)/)[1];
+    const nonce = (csp.match(/nonce-([^']+)/) as RegExpMatchArray)[1];
     assert.ok([...html.matchAll(/<script(?=[\s>])([^>]*)>/g)].every((m) => m[1].includes(`nonce="${nonce}"`)), 'every script carries the nonce');
   } finally { await t.done(); }
 });
@@ -244,7 +251,7 @@ dtest('a sync split into short steps ends with the same data', async () => {
     assert.strictEqual(a.syncState, 'ok');
     const camp = (await t.call('GET', `/api/accounts/${id}/entities?level=campaign&since=${isoDaysAgo(29)}&until=${isoDaysAgo(0)}`)).body;
     assert.strictEqual(camp.campaigns.length, 5);
-    assert.ok(camp.campaigns.every((c) => c.daily.length > 0));
+    assert.ok(camp.campaigns.every((c: Row) => c.daily.length > 0));
   } finally { await t.done(); }
 });
 
@@ -307,8 +314,8 @@ test('the Vercel entry point serves the app', async () => {
   Object.assign(process.env, { DEMO: '1', DATA_DIR: dir });
   delete process.env.VERCEL;
   try {
-    delete require.cache[require.resolve('../api/index.js')];
-    const handler = require('../api/index.js');
+    delete require.cache[require.resolve('../api/index.ts')];
+    const handler = require('../api/index.ts');
     const srv = http.createServer(handler);
     await new Promise((r) => srv.listen(0, '127.0.0.1', r));
     const base = `http://127.0.0.1:${srv.address().port}`;
@@ -316,7 +323,7 @@ test('the Vercel entry point serves the app', async () => {
     assert.strictEqual(health.ok, true);
     const page = await fetch(`${base}/`);
     assert.strictEqual(page.status, 200);
-    assert.match(page.headers.get('content-security-policy'), /nonce-/);
+    assert.match(page.headers.get('content-security-policy') as string, /nonce-/);
     await new Promise((r) => srv.close(r));
   } finally {
     process.env = saved;
@@ -329,7 +336,7 @@ test('the Vercel entry point serves the app', async () => {
 dtest('sign in by pasting an access token', async () => {
   const t = await setup();
   try {
-    const post = (body, extra = {}) => t.call('POST', '/auth/meta/token', { body, ...extra });
+    const post = (body: Row, extra = {}) => t.call('POST', '/auth/meta/token', { body, ...extra });
     // Wrong content type and cross-site requests are refused.
     const form = await fetch(t.config.baseUrl + '/auth/meta/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'token=demo-short-token' });
     assert.strictEqual(form.status, 415);
@@ -354,7 +361,7 @@ dtest('sign in by pasting an access token', async () => {
     assert.ok(accounts.body.accounts.length > 0);
     // The token is stored encrypted, never in plain text.
     const row = await t.app.db.get('SELECT token_enc FROM users WHERE id = ?', me.body.id);
-    assert.ok(!String(row.token_enc).includes('demo-long-token'));
+    assert.ok(!String(row!.token_enc).includes('demo-long-token'));
   } finally { await t.done(); }
 });
 
@@ -374,8 +381,8 @@ test('token sign-in can be switched off; Facebook Login is off by default when h
 });
 
 dtest('a step that runs out of time mid-chunk resumes without losing or doubling data', async () => {
-  const { syncStep } = require('../server/meta/sync.js');
-  const { GraphClient } = require('../server/meta/client.js');
+  const { syncStep } = require('../server/meta/sync.ts');
+  const { GraphClient } = require('../server/meta/client.ts');
   const t = await setup();
   try {
     const me = await t.signIn();
@@ -386,21 +393,21 @@ dtest('a step that runs out of time mid-chunk resumes without losing or doubling
     const c = fresh();
     let insightCalls = 0;
     const real = c.request.bind(c);
-    c.request = async (url) => {
+    c.request = async (url: Row) => {
       if (url.includes('/insights') && ++insightCalls === 2) { c.deadline = Date.now() - 1; c.checkTime(); }
       return real(url);
     };
     const r1 = await syncStep({ db, userId: me.id, accountId: id, client: c });
     assert.strictEqual(r1.done, false);
-    const cursor = (await db.get('SELECT sync_cursor FROM ad_accounts WHERE id = ?', id)).sync_cursor;
+    const cursor = (await db.get('SELECT sync_cursor FROM ad_accounts WHERE id = ?', id))!.sync_cursor;
     assert.strictEqual(r1.cursor, cursor, 'cursor stays at the start of the unfinished chunk');
     // Finish with a normal client, then compare with a clean full sync.
     let r; do { r = await syncStep({ db, userId: me.id, accountId: id, client: fresh() }); } while (!r.done);
-    const n1 = (await db.get('SELECT COUNT(*) AS n, SUM(spend) AS s FROM daily WHERE account_id = ?', id));
+    const n1 = (await db.get('SELECT COUNT(*) AS n, SUM(spend) AS s FROM daily WHERE account_id = ?', id))!;
     await db.run('DELETE FROM daily WHERE account_id = ?', id);
     await db.run('UPDATE ad_accounts SET sync_cursor = NULL, synced_until = NULL WHERE id = ?', id);
     do { r = await syncStep({ db, userId: me.id, accountId: id, client: fresh() }); } while (!r.done);
-    const n2 = (await db.get('SELECT COUNT(*) AS n, SUM(spend) AS s FROM daily WHERE account_id = ?', id));
+    const n2 = (await db.get('SELECT COUNT(*) AS n, SUM(spend) AS s FROM daily WHERE account_id = ?', id))!;
     assert.ok(Number(n1.n) > 0);
     assert.deepStrictEqual([Number(n1.n), Number(n1.s)], [Number(n2.n), Number(n2.s)]);
   } finally { await t.done(); }
@@ -434,7 +441,7 @@ dtest('history: extending it fetches older days once; daily top-ups stay small',
     let a = await syncAll();
     assert.strictEqual(a.historyDays, 90);
     assert.strictEqual(a.syncedFrom, isoDaysAgo(89));
-    const oldest = async () => (await t.app.db.get('SELECT MIN(date) AS d FROM daily WHERE account_id = ?', id)).d;
+    const oldest = async () => (await t.app.db.get('SELECT MIN(date) AS d FROM daily WHERE account_id = ?', id))!.d;
     assert.ok(await oldest() >= isoDaysAgo(89));
     // Bad values are refused.
     assert.strictEqual((await t.call('PUT', `/api/accounts/${id}/settings`, { body: { historyDays: 5000 }, csrf: me.csrf })).status, 400);
@@ -450,7 +457,7 @@ dtest('history: extending it fetches older days once; daily top-ups stay small',
     await t.app.db.run('UPDATE ad_accounts SET last_synced_at = 0 WHERE id = ?', id);
     const before = t.mock.stats ? t.mock.stats.calls : null;
     a = await syncAll();
-    const cursorRun = await t.app.db.get('SELECT synced_from FROM ad_accounts WHERE id = ?', id);
+    const cursorRun = (await t.app.db.get('SELECT synced_from FROM ad_accounts WHERE id = ?', id))!;
     assert.strictEqual(cursorRun.synced_from, isoDaysAgo(364));
     if (before !== null) assert.ok(t.mock.stats.calls - before < 40, `top-up used ${t.mock.stats.calls - before} calls`);
     // Shrinking history keeps what's already synced.

@@ -1,7 +1,6 @@
 node_modules/
 *.log
 .env
-# never commit real campaign data or exports
 data/
 *.db
 *.db-*

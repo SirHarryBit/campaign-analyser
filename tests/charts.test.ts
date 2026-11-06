@@ -1,8 +1,8 @@
 const test: typeof import('node:test') = require('node:test');
 const assert: typeof import('node:assert') = require('node:assert');
-const C: CoreApi = require('../src/core.js');
+const C: CoreApi = require('../src/core.ts');
 const K: ChartsApi = require('../src/charts.ts');
-const { SAMPLE_CSV }: { SAMPLE_CSV: string } = require('../src/sample.js');
+const { SAMPLE_CSV }: { SAMPLE_CSV: string } = require('../src/sample.ts');
 
 function sampleResult(n = 3): CompareResult {
   const rows = SAMPLE_CSV.split('\n').map((l) => l.split(','));

@@ -1,7 +1,9 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const M = require('../server/meta/map.js');
-const { GraphClient, MetaError, regainMsFromHeaders } = require('../server/meta/client.js');
+import type { MapApi } from '../server/meta/map.ts';
+import type { ClientApi } from '../server/meta/client.ts';
+const test: typeof import('node:test') = require('node:test');
+const assert: typeof import('node:assert') = require('node:assert');
+const M: MapApi = require('../server/meta/map.ts');
+const { GraphClient, MetaError, regainMsFromHeaders }: ClientApi = require('../server/meta/client.ts');
 
 test('budgets: INR paise to rupees, zero-decimal currencies untouched', () => {
   assert.strictEqual(M.budgetToUnits('600000', 'INR'), 6000);
@@ -43,10 +45,10 @@ test('insight row mapping uses link clicks and purchase values', () => {
 });
 
 test('targeting notes feed the open / loose / focused classifier', () => {
-  assert.match(M.targetingNotes({ targeting_automation: { advantage_audience: 1 }, geo_locations: { cities: [{ name: 'Mumbai' }] } }), /Advantage\+ audience/);
-  assert.match(M.targetingNotes({ custom_audiences: [{ name: '1% Lookalike (IN) - Members' }] }), /Lookalike/);
-  assert.match(M.targetingNotes({ flexible_spec: [{ interests: [{ name: 'Yoga' }, { name: 'Meditation' }] }] }), /Interests: Yoga, Meditation/);
-  assert.match(M.targetingNotes({ geo_locations: { countries: ['IN'] }, age_min: 25, age_max: 45 }), /Broad/);
+  assert.match(M.targetingNotes({ targeting_automation: { advantage_audience: 1 }, geo_locations: { cities: [{ name: 'Mumbai' }] } }) as string, /Advantage\+ audience/);
+  assert.match(M.targetingNotes({ custom_audiences: [{ name: '1% Lookalike (IN) - Members' }] }) as string, /Lookalike/);
+  assert.match(M.targetingNotes({ flexible_spec: [{ interests: [{ name: 'Yoga' }, { name: 'Meditation' }] }] }) as string, /Interests: Yoga, Meditation/);
+  assert.match(M.targetingNotes({ geo_locations: { countries: ['IN'] }, age_min: 25, age_max: 45 }) as string, /Broad/);
 });
 
 test('universe is the midpoint of the audience estimate', () => {
@@ -63,11 +65,12 @@ test('budget for a date range: daily budget × live days, lifetime as is', () =>
 });
 
 // ---- Graph client against a fake fetch ----
-function fakeFetch(responses) {
-  const calls = [];
-  const fn = async (url) => {
+type FakeResponse = { status?: number; headers?: Record<string, string>; body: unknown };
+function fakeFetch(responses: FakeResponse[]) {
+  const calls: string[] = [];
+  const fn = async (url: string) => {
     calls.push(url);
-    const r = responses.shift();
+    const r = responses.shift() as FakeResponse;
     return {
       ok: (r.status || 200) < 400,
       status: r.status || 200,
@@ -75,8 +78,7 @@ function fakeFetch(responses) {
       json: async () => r.body,
     };
   };
-  fn.calls = calls;
-  return fn;
+  return Object.assign(fn, { calls }) as unknown as typeof fetch & { calls: string[] };
 }
 const noSleep = async () => {};
 
@@ -93,12 +95,12 @@ test('client adds appsecret_proof and follows paging', async () => {
 });
 
 test('client waits out a rate limit, then succeeds', async () => {
-  const waits = [];
+  const waits: number[] = [];
   const f = fakeFetch([
     { status: 400, body: { error: { code: 17, message: 'User request limit reached' } }, headers: { 'x-business-use-case-usage': JSON.stringify({ 1: [{ call_count: 100, estimated_time_to_regain_access: 1 }] }) } },
     { body: { data: [] } },
   ]);
-  const c = new GraphClient({ token: 't', fetchImpl: f, sleep: async (ms) => waits.push(ms) });
+  const c = new GraphClient({ token: 't', fetchImpl: f, sleep: async (ms: number) => { waits.push(ms); } });
   await c.get('me');
   assert.ok(waits.includes(60000), 'waited the minute Meta asked for');
 });
@@ -107,11 +109,11 @@ test('client gives up on long rate limits and on expired tokens', async () => {
   const long = fakeFetch([{ status: 400, body: { error: { code: 80000, message: 'Too many calls' } }, headers: { 'x-business-use-case-usage': JSON.stringify({ 1: [{ estimated_time_to_regain_access: 30 }] }) } }]);
   await assert.rejects(new GraphClient({ token: 't', fetchImpl: long, sleep: noSleep }).get('me'), (e) => e instanceof MetaError && e.kind === 'rate_limit' && e.retryAfterMs === 1800000);
   const expired = fakeFetch([{ status: 400, body: { error: { code: 190, message: 'Session has expired' } } }]);
-  await assert.rejects(new GraphClient({ token: 't', fetchImpl: expired, sleep: noSleep }).get('me'), (e) => e.kind === 'auth');
+  await assert.rejects(new GraphClient({ token: 't', fetchImpl: expired, sleep: noSleep }).get('me'), (e: any) => e.kind === 'auth');
 });
 
 test('regain time is read from usage headers', () => {
-  const h = new Map([['x-ad-account-usage', JSON.stringify({ acc_id_util_pct: 99, reset_time_duration: 2 })]]);
+  const h = new Headers({ 'x-ad-account-usage': JSON.stringify({ acc_id_util_pct: 99, reset_time_duration: 2 }) });
   assert.strictEqual(regainMsFromHeaders(h), 120000);
 });
 
@@ -119,7 +121,7 @@ test('client: stops before a wait or request would run past its deadline', async
   const limited = async () => new Response(JSON.stringify({ error: { message: 'User request limit reached', code: 17 } }), {
     status: 400, headers: { 'x-business-use-case-usage': JSON.stringify({ 1: [{ estimated_time_to_regain_access: 1 }] }) },
   });
-  const slept = [];
+  const slept: number[] = [];
   const c = new GraphClient({ token: 't', fetchImpl: limited, sleep: async (ms) => { slept.push(ms); } });
   c.deadline = Date.now() + 10000; // Meta asks for a 60 s wait; only 10 s left
   await assert.rejects(c.get('act_1/insights'), (e) => e instanceof MetaError && e.kind === 'deadline');
@@ -128,6 +130,6 @@ test('client: stops before a wait or request would run past its deadline', async
   let fetched = 0;
   const c2 = new GraphClient({ token: 't', fetchImpl: async () => { fetched++; return new Response('{}'); } });
   c2.deadline = Date.now() + 3000;
-  await assert.rejects(c2.get('me'), (e) => e.kind === 'deadline');
+  await assert.rejects(c2.get('me'), (e: any) => e.kind === 'deadline');
   assert.strictEqual(fetched, 0);
 });

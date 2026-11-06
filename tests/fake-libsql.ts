@@ -2,19 +2,20 @@
 // result shapes (ResultSet: { columns, rows, rowsAffected }, rows array-like with
 // column-name properties) and batch(statements, "write") semantics.
 // Lets the tests run the server against the libSQL code path without the package.
-'use strict';
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync }: typeof import('node:sqlite') = require('node:sqlite');
 
-function createFakeClient() {
+interface Stmt { sql: string; args: any[] }
+
+function createFakeClient(): LibsqlClient & { calls: number } {
   const db = new DatabaseSync(':memory:');
-  const toStmt = (s) => (typeof s === 'string' ? { sql: s, args: [] } : { sql: s.sql, args: s.args || [] });
-  function run({ sql, args }) {
+  const toStmt = (s: string | { sql: string; args?: unknown[] }): Stmt => (typeof s === 'string' ? { sql: s, args: [] } : { sql: s.sql, args: s.args || [] });
+  function run({ sql, args }: Stmt) {
     for (const a of args) if (a === undefined) throw new TypeError('libsql: undefined is not a valid argument');
     const st = db.prepare(sql);
     const reader = /^\s*(select|pragma|with)/i.test(sql) || /\breturning\b/i.test(sql);
     if (reader) {
-      const objs = st.all(...args);
-      const columns = st.columns().map((c) => c.name);
+      const objs = st.all(...args) as Row[];
+      const columns = st.columns().map((c) => c.name as string);
       const rows = objs.map((o) => { const r = columns.map((c) => o[c]); columns.forEach((c, i) => { Object.defineProperty(r, c, { value: r[i], enumerable: false }); }); return r; });
       return { columns, rows, rowsAffected: 0, lastInsertRowid: undefined };
     }
@@ -23,8 +24,8 @@ function createFakeClient() {
   }
   return {
     calls: 0,
-    async execute(stmt) { this.calls++; return run(toStmt(stmt)); },
-    async batch(stmts, mode) {
+    async execute(stmt: string | { sql: string; args?: unknown[] }) { this.calls++; return run(toStmt(stmt)); },
+    async batch(stmts: (string | { sql: string; args?: unknown[] })[], mode?: string) {
       this.calls++;
       if (mode !== 'write' && mode !== 'read' && mode !== 'deferred') throw new Error('bad mode');
       db.exec('BEGIN');
@@ -34,4 +35,6 @@ function createFakeClient() {
   };
 }
 
-module.exports = { createFakeClient };
+const api = { createFakeClient };
+module.exports = api;
+export type FakeLibsqlApi = typeof api;

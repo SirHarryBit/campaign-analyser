@@ -1,5 +1,5 @@
-// Shared types for the browser code (core.js, charts.ts, app.ts) and tests.
-// core.js is plain JavaScript; these declarations describe what it exposes.
+// Shared types for the browser code (core.ts, charts.ts, app.ts) and tests.
+// core.ts is wrapped so the same file runs in the browser and in Node; these declarations describe what it exposes.
 
 type MetricKey =
   | 'days' | 'spend' | 'budget' | 'budgetUsedPct' | 'dailySpend' | 'impressions' | 'reach' | 'frequency'
@@ -29,6 +29,8 @@ interface Campaign {
   source?: 'meta' | 'file';
   status?: string;
   startDate?: string;
+  /** When it began (Meta start time, else first synced day with spend). Used for sorting the list. */
+  startedAt?: string;
   endDate?: string;
   budget?: number;
   spend?: number;
@@ -37,6 +39,9 @@ interface Campaign {
   clicks?: number;
   leads?: number;
   qualifiedLeads?: number;
+  views?: number;
+  landingPageViews?: number;
+  frequency?: number;
   conversions?: number;
   conversionValue?: number;
   universe?: number;
@@ -131,13 +136,19 @@ interface CoreApi {
   DEFAULT_SETTINGS: Settings;
   FIELDS: FieldDef[];
   METRIC_DEFS: Record<MetricKey, MetricDef>;
-  rowsToCampaigns(rows: unknown[][], opts?: object): { campaigns: Campaign[]; mapping: Record<string, unknown>; currency?: string; warnings: string[] };
+  rowsToCampaigns(rows: unknown[][], opts?: { platform?: string }): { campaigns: Campaign[]; mapping: Record<string, number>; headers?: string[]; currency?: string | null; warnings: string[] };
   normaliseCampaign(c: Partial<Campaign>): Campaign;
-  computeMetrics(c: Campaign): Metrics;
-  targetLevels(c: Campaign): number[];
-  dataLevels(c: Campaign): number[];
-  classifyTargeting(c: Campaign, settings?: Settings): { type: TargetingType; reason: string };
-  missingInputs(c: Campaign): string[];
+  // These read whatever fields a campaign has, so they accept partial ones.
+  computeMetrics(c: Partial<Campaign>): Metrics;
+  targetLevels(c: Partial<Campaign>): number[];
+  dataLevels(c: Partial<Campaign>): number[];
+  classifyTargeting(c: Partial<Campaign>, settings?: Settings): { type: TargetingType; reason: string };
+  missingInputs(c: Partial<Campaign>): string[];
+  parseNumber(v: unknown): number | null;
+  parseDate(v: unknown): string | null;
+  mapColumns(headers: string[]): Record<string, number>;
+  comparisonTiers(objective: ObjectiveKey | null): Omit<Tier, 'ranks'>[];
+  twoProportionP(x1: unknown, n1: unknown, x2: unknown, n2: unknown): number | null;
   compare(campaigns: Campaign[], settings?: Settings): CompareResult;
   isNum(v: unknown): v is number;
   fmtMoney(v: number | null | undefined, currency?: string): string;
@@ -147,7 +158,31 @@ interface CoreApi {
   formatMetric(key: MetricKey, v: number | null | undefined, currency?: string): string;
   toCsv(r: CompareResult): string;
   toRows(r: CompareResult): unknown[][];
-  objectiveOf(c: Campaign): ObjectiveKey | null;
+  objectiveOf(c: Partial<Campaign>): ObjectiveKey | null;
+  statusKind(c: Partial<Campaign>): 'active' | 'inactive' | 'unknown';
+  listView(items: Campaign[], opts?: Partial<ListViewOpts>): ListViewResult;
+  listTotals(items: Campaign[]): ListTotals;
+  listToCsv(items: Campaign[]): string;
+}
+
+interface ListTotals {
+  count: number;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  qualifiedLeads: number;
+  cpl: number | null;
+  qualifiedPct: number | null;
+}
+type StatusFilter = 'all' | 'active' | 'inactive';
+type ListSort = 'default' | 'newest' | 'oldest' | 'name';
+interface ListViewOpts { q: string; status: StatusFilter; sort: ListSort }
+interface ListViewResult {
+  items: Campaign[];
+  counts: { all: number; active: number; inactive: number };
+  total: number;
+  anyStatus: boolean;
 }
 
 // ---------- charts ----------

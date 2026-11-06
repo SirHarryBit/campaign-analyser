@@ -2,14 +2,22 @@
 // - appsecret_proof on every call (Meta's recommended token hardening)
 // - follows cursor paging
 // - backs off on rate limits and transient errors, using Meta's usage headers
-'use strict';
-const crypto = require('node:crypto');
+const crypto: typeof import('node:crypto') = require('node:crypto');
 
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613]);
-const isRateLimit = (code) => RATE_LIMIT_CODES.has(code) || (code >= 80000 && code <= 80014);
+const isRateLimit = (code: number): boolean => RATE_LIMIT_CODES.has(code) || (code >= 80000 && code <= 80014);
+
+type MetaErrorKind = 'auth' | 'rate_limit' | 'permission' | 'too_much_data' | 'transient' | 'deadline' | 'other';
+interface MetaErrorInfo { code?: number; subcode?: number; status?: number; fbtraceId?: string; retryAfterMs?: number; kind?: MetaErrorKind }
 
 class MetaError extends Error {
-  constructor(message, { code, subcode, status, fbtraceId, retryAfterMs, kind } = {}) {
+  code: number | undefined;
+  subcode: number | undefined;
+  status: number | undefined;
+  fbtraceId: string | undefined;
+  retryAfterMs: number | undefined;
+  kind: MetaErrorKind;
+  constructor(message: string, { code, subcode, status, fbtraceId, retryAfterMs, kind }: MetaErrorInfo = {}) {
     super(message);
     this.name = 'MetaError';
     this.code = code;
@@ -22,7 +30,7 @@ class MetaError extends Error {
   }
 }
 
-function classify(err, status) {
+function classify(err: Row, status: number): MetaErrorKind {
   const code = err.code;
   if (code === 190 || code === 102 || status === 401) return 'auth';
   if (isRateLimit(code)) return 'rate_limit';
@@ -33,7 +41,7 @@ function classify(err, status) {
 }
 
 /** Largest "minutes until access returns" from Meta's usage headers, in ms. */
-function regainMsFromHeaders(headers) {
+function regainMsFromHeaders(headers: Headers): number {
   let mins = 0;
   for (const h of ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage']) {
     const raw = headers.get(h);
@@ -51,7 +59,7 @@ function regainMsFromHeaders(headers) {
 }
 
 /** Highest usage percentage Meta reports (0–100+). */
-function usagePctFromHeaders(headers) {
+function usagePctFromHeaders(headers: Headers): number {
   let pct = 0;
   for (const h of ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage']) {
     const raw = headers.get(h);
@@ -70,7 +78,32 @@ function usagePctFromHeaders(headers) {
   return pct;
 }
 
+interface GraphClientOptions {
+  token: string;
+  appSecret?: string;
+  version?: string;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  maxRetries?: number;
+  maxWaitMs?: number;
+  timeoutMs?: number;
+}
+type Params = Record<string, unknown>;
+
 class GraphClient {
+  token: string;
+  proof: string | null;
+  version: string;
+  baseUrl: string;
+  fetch: typeof fetch;
+  sleep: (ms: number) => Promise<void>;
+  maxRetries: number;
+  maxWaitMs: number;
+  timeoutMs: number;
+  deadline: number;
+  calls: number;
+  lastUsagePct: number;
   /**
    * @param {object} o
    * @param {string} o.token        user access token
@@ -80,13 +113,13 @@ class GraphClient {
    * @param {number} [o.maxRetries]
    * @param {number} [o.maxWaitMs]  longest wait we'll sleep through before giving up
    */
-  constructor({ token, appSecret, version = 'v25.0', baseUrl = 'https://graph.facebook.com', fetchImpl = fetch, sleep, maxRetries = 4, maxWaitMs = 120000, timeoutMs = 30000 } = {}) {
+  constructor({ token, appSecret, version = 'v25.0', baseUrl = 'https://graph.facebook.com', fetchImpl = fetch, sleep, maxRetries = 4, maxWaitMs = 120000, timeoutMs = 30000 }: GraphClientOptions) {
     this.token = token;
     this.proof = appSecret ? crypto.createHmac('sha256', appSecret).update(token).digest('hex') : null;
     this.version = version;
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.fetch = fetchImpl;
-    this.sleep = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.sleep = sleep || ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     this.maxRetries = maxRetries;
     this.maxWaitMs = maxWaitMs;
     this.timeoutMs = timeoutMs;
@@ -97,7 +130,7 @@ class GraphClient {
     this.lastUsagePct = 0;
   }
 
-  url(path, params = {}, { auth = true } = {}) {
+  url(path: string, params: Params = {}, { auth = true }: { auth?: boolean } = {}): string {
     const u = new URL(/^https?:/.test(path) ? path : `${this.baseUrl}/${this.version}/${path.replace(/^\//, '')}`);
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null) continue;
@@ -108,26 +141,26 @@ class GraphClient {
     return u.toString();
   }
 
-  async get(path, params) {
+  async get(path: string, params?: Params): Promise<Row> {
     return this.request(this.url(path, params));
   }
 
   /** Calls that must not carry a user token (the OAuth code exchange). */
-  async getNoAuth(path, params) {
+  async getNoAuth(path: string, params?: Params): Promise<Row> {
     return this.request(this.url(path, params, { auth: false }));
   }
 
   /** Throws a 'deadline' error if waiting `ms` more would run past the deadline. */
-  checkTime(ms = 0) {
+  checkTime(ms = 0): void {
     if (Date.now() + ms > this.deadline) throw new MetaError('Out of time for this step; the sync continues in the next one.', { kind: 'deadline' });
   }
 
-  async wait(ms) {
+  async wait(ms: number): Promise<void> {
     this.checkTime(ms);
     await this.sleep(ms);
   }
 
-  async request(url) {
+  async request(url: string): Promise<Row> {
     let attempt = 0;
     for (;;) {
       // Slow down before Meta makes us stop.
@@ -135,14 +168,14 @@ class GraphClient {
       else if (this.lastUsagePct >= 75) await this.wait(2000);
       this.checkTime(5000); // not worth starting a request with less than 5 s left
       const timeout = Math.max(1000, Math.min(this.timeoutMs, this.deadline - Date.now()));
-      let res, body;
+      let res: Response, body: Row;
       try {
         this.calls++;
         res = await this.fetch(url, { signal: AbortSignal.timeout(timeout), headers: { accept: 'application/json' } });
         body = await res.json().catch(() => ({}));
       } catch (e) {
         if (attempt++ < this.maxRetries) { await this.wait(this.backoff(attempt)); continue; }
-        throw new MetaError(`Could not reach Meta: ${e.message}`, { kind: 'transient' });
+        throw new MetaError(`Could not reach Meta: ${e instanceof Error ? e.message : String(e)}`, { kind: 'transient' });
       }
       this.lastUsagePct = usagePctFromHeaders(res.headers);
       if (res.ok && !body.error) return body;
@@ -163,13 +196,13 @@ class GraphClient {
     }
   }
 
-  backoff(attempt) {
+  backoff(attempt: number): number {
     return Math.min(60000, 1000 * 2 ** attempt) + Math.floor(Math.random() * 250);
   }
 
   /** Every item across all pages. */
-  async all(path, params, { maxPages = 200 } = {}) {
-    const out = [];
+  async all(path: string, params?: Params, { maxPages = 200 }: { maxPages?: number } = {}): Promise<Row[]> {
+    const out: Row[] = [];
     let body = await this.get(path, params);
     for (let page = 0; ; page++) {
       if (Array.isArray(body.data)) out.push(...body.data);
@@ -181,4 +214,7 @@ class GraphClient {
   }
 }
 
-module.exports = { GraphClient, MetaError, isRateLimit, regainMsFromHeaders, usagePctFromHeaders, classify };
+const api = { GraphClient, MetaError, isRateLimit, regainMsFromHeaders, usagePctFromHeaders, classify };
+module.exports = api;
+export type ClientApi = typeof api;
+export type { GraphClient, MetaError };

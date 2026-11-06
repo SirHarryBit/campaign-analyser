@@ -3,8 +3,6 @@
 //  - hosted: Turso / libSQL over the network (@libsql/client), needed on Vercel,
 //            where functions have no lasting disk.
 // Both speak SQLite SQL, so the schema and queries are shared.
-'use strict';
-
 const TABLES = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,               -- Meta user id (app-scoped)
@@ -104,7 +102,7 @@ CREATE TABLE IF NOT EXISTS deletion_requests (
 `;
 
 // Columns added after the first release; older local databases get them on start-up.
-const MIGRATIONS = [
+const MIGRATIONS: [table: string, column: string, type: string][] = [
   ['ad_accounts', 'auto_sync', 'INTEGER DEFAULT 1'],
   ['ad_accounts', 'sync_started_at', 'INTEGER'],
   ['ad_accounts', 'sync_cursor', 'TEXT'],
@@ -116,45 +114,56 @@ const MIGRATIONS = [
 // Every table that holds a user's data (used to delete a user completely).
 const USER_TABLES = ['sessions', 'ad_accounts', 'entities', 'daily', 'totals_cache', 'manual_inputs', 'comparisons', 'shares', 'usage_events'];
 
-const statements = (sql) => sql.split(';').map((s) => s.replace(/--.*$/gm, '').trim()).filter(Boolean);
-const clean = (args) => args.map((v) => (v === undefined ? null : typeof v === 'boolean' ? (v ? 1 : 0) : v));
+const statements = (sql: string): string[] => sql.split(';').map((s) => s.replace(/--.*$/gm, '').trim()).filter(Boolean);
+const clean = (args: SqlArg[]): Exclude<SqlArg, undefined | boolean>[] => args.map((v) => (v === undefined ? null : typeof v === 'boolean' ? (v ? 1 : 0) : v));
 
 /** Local file database on node:sqlite. */
-function sqliteDriver(file) {
-  const { DatabaseSync } = require('node:sqlite');
+interface Driver {
+  kind: Db['kind'];
+  exec(sql: string): Promise<void>;
+  get(sql: string, args: SqlArg[]): Promise<Row | undefined>;
+  all(sql: string, args: SqlArg[]): Promise<Row[]>;
+  run(sql: string, args: SqlArg[]): Promise<{ changes: number }>;
+  batch(list: BatchItem[]): Promise<void>;
+  close(): void;
+}
+
+function sqliteDriver(file: string): Driver {
+  const { DatabaseSync }: typeof import('node:sqlite') = require('node:sqlite');
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
-  const cache = new Map();
-  const stmt = (sql) => {
-    if (!cache.has(sql)) cache.set(sql, db.prepare(sql));
-    return cache.get(sql);
+  const cache = new Map<string, ReturnType<typeof db.prepare>>();
+  const stmt = (sql: string) => {
+    let s = cache.get(sql);
+    if (!s) { s = db.prepare(sql); cache.set(sql, s); }
+    return s;
   };
   return {
     kind: 'sqlite',
-    async exec(sql) { db.exec(sql); },
-    async get(sql, args) { return stmt(sql).get(...clean(args)); },
-    async all(sql, args) { return stmt(sql).all(...clean(args)); },
-    async run(sql, args) { const r = stmt(sql).run(...clean(args)); return { changes: Number(r.changes) }; },
-    async batch(list) {
+    async exec(sql: string) { db.exec(sql); },
+    async get(sql: string, args: SqlArg[]) { return stmt(sql).get(...(clean(args) as any[])) as Row | undefined; },
+    async all(sql: string, args: SqlArg[]) { return stmt(sql).all(...(clean(args) as any[])) as Row[]; },
+    async run(sql: string, args: SqlArg[]) { const r = stmt(sql).run(...(clean(args) as any[])); return { changes: Number(r.changes) }; },
+    async batch(list: BatchItem[]) {
       db.exec('BEGIN');
-      try { for (const [sql, ...args] of list) stmt(sql).run(...clean(args)); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+      try { for (const [sql, ...args] of list) stmt(sql).run(...(clean(args) as any[])); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
     },
     close() { db.close(); },
   };
 }
 
 /** Turso / libSQL. `client` can be injected (tests); otherwise one is created from url + token. */
-function libsqlDriver({ url, authToken, client }) {
-  const c = client || require('@libsql/client').createClient({ url, authToken, intMode: 'number' });
-  const toObj = (rs, row) => Object.fromEntries(rs.columns.map((col, i) => [col, row[i]]));
-  const exec = (sql, args) => c.execute({ sql, args: clean(args) });
+function libsqlDriver({ url, authToken, client }: { url?: string; authToken?: string; client?: LibsqlClient }): Driver {
+  const c: LibsqlClient = client || require('@libsql/client').createClient({ url, authToken, intMode: 'number' });
+  const toObj = (rs: { columns: string[] }, row: any[]): Row => Object.fromEntries(rs.columns.map((col, i) => [col, row[i]]));
+  const exec = (sql: string, args: SqlArg[]) => c.execute({ sql, args: clean(args) });
   return {
     kind: 'libsql',
-    async exec(sql) { await c.batch(statements(sql), 'write'); },
-    async get(sql, args) { const rs = await exec(sql, args); return rs.rows.length ? toObj(rs, rs.rows[0]) : undefined; },
-    async all(sql, args) { const rs = await exec(sql, args); return rs.rows.map((r) => toObj(rs, r)); },
-    async run(sql, args) { const rs = await exec(sql, args); return { changes: Number(rs.rowsAffected) }; },
-    async batch(list) {
+    async exec(sql: string) { await c.batch(statements(sql), 'write'); },
+    async get(sql: string, args: SqlArg[]) { const rs = await exec(sql, args); return rs.rows.length ? toObj(rs, rs.rows[0]) : undefined; },
+    async all(sql: string, args: SqlArg[]) { const rs = await exec(sql, args); return rs.rows.map((r) => toObj(rs, r)); },
+    async run(sql: string, args: SqlArg[]) { const rs = await exec(sql, args); return { changes: Number(rs.rowsAffected) }; },
+    async batch(list: BatchItem[]) {
       // One round trip, all-or-nothing. Large syncs are split to keep each request small.
       for (let i = 0; i < list.length; i += 200) {
         await c.batch(list.slice(i, i + 200).map(([sql, ...args]) => ({ sql, args: clean(args) })), 'write');
@@ -166,10 +175,9 @@ function libsqlDriver({ url, authToken, client }) {
 
 /**
  * Open the database and make sure the schema is current.
- * @param {{ file?: string, url?: string, authToken?: string, client?: object }} o
  */
-async function openDb(o) {
-  const d = o.url || o.client ? libsqlDriver(o) : sqliteDriver(o.file);
+async function openDb(o: { file?: string; url?: string; authToken?: string; client?: LibsqlClient }): Promise<Db> {
+  const d = o.url || o.client ? libsqlDriver(o) : sqliteDriver(o.file as string);
   await d.exec(TABLES);
   for (const [table, col, type] of MIGRATIONS) {
     const cols = await d.all(`PRAGMA table_info(${table})`, []);
@@ -177,13 +185,15 @@ async function openDb(o) {
   }
   return {
     kind: d.kind,
-    get: (sql, ...args) => d.get(sql, args),
-    all: (sql, ...args) => d.all(sql, args),
-    run: (sql, ...args) => d.run(sql, args),
+    get: (sql: string, ...args: SqlArg[]) => d.get(sql, args),
+    all: (sql: string, ...args: SqlArg[]) => d.all(sql, args),
+    run: (sql: string, ...args: SqlArg[]) => d.run(sql, args),
     /** Several writes, applied together. Each item: [sql, ...args]. */
-    batch: (list) => (list.length ? d.batch(list) : Promise.resolve()),
+    batch: (list: BatchItem[]) => (list.length ? d.batch(list) : Promise.resolve()),
     close: () => d.close(),
   };
 }
 
-module.exports = { openDb, USER_TABLES };
+const api = { openDb, USER_TABLES };
+module.exports = api;
+export type DbApi = typeof api;

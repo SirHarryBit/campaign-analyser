@@ -3,12 +3,13 @@
  * Pure functions only (no DOM), so the same file runs in the browser and in Node tests.
  * Exposes `CampaignCore` on window, and module.exports in Node.
  */
-(function (root) {
-  'use strict';
+type Rec = Record<string, any>; // spreadsheet rows and merged campaigns are built up field by field
+
+(function (root: { CampaignCore?: CoreApi }) {
 
   // ---------- Constants ----------
 
-  const FUNNEL_LEVELS = [
+  const FUNNEL_LEVELS: FunnelLevel[] = [
     { level: 1, stage: 'Awareness', name: 'Reach & impressions', kpis: ['impressions', 'reach', 'cpm'] },
     { level: 2, stage: 'Awareness', name: 'Frequency', kpis: ['frequency'] },
     { level: 3, stage: 'Engagement', name: 'Clicks & views', kpis: ['clicks', 'ctr', 'cpc', 'views', 'costPerView'] },
@@ -16,7 +17,7 @@
     { level: 5, stage: 'Conversion', name: 'Conversions', kpis: ['conversions', 'cpa', 'roas'] },
   ];
 
-  const OBJECTIVES = {
+  const OBJECTIVES: CoreApi['OBJECTIVES'] = {
     awareness: { label: 'Awareness / reach', levels: [1, 2], primaryCost: 'cpm' },
     traffic: { label: 'Traffic', levels: [3], primaryCost: 'cpc' },
     engagement: { label: 'Engagement', levels: [3], primaryCost: 'cpc' },
@@ -26,9 +27,9 @@
   };
 
   const PLATFORMS = ['Meta', 'Google', 'LinkedIn', 'YouTube', 'Other'];
-  const TARGETING = { open: 'Open', loose: 'Loose', focused: 'Focused', unknown: 'Not classified' };
+  const TARGETING: Record<TargetingType, string> = { open: 'Open', loose: 'Loose', focused: 'Focused', unknown: 'Not classified' };
 
-  const DEFAULT_SETTINGS = {
+  const DEFAULT_SETTINGS: Settings = {
     currency: 'INR',
     targetCpl: null, // your own target, optional
     targetQualifiedPct: 0.3, // 30%
@@ -39,7 +40,7 @@
   };
 
   // Every field a campaign can hold. `input: true` means the user can type it in.
-  const FIELDS = [
+  const FIELDS: FieldDef[] = [
     { key: 'name', label: 'Campaign', type: 'text' },
     { key: 'platform', label: 'Platform', type: 'select', options: PLATFORMS },
     { key: 'objective', label: 'Objective', type: 'select', options: Object.keys(OBJECTIVES) },
@@ -63,7 +64,7 @@
   ];
 
   // Header aliases for Meta Ads Manager, Google Ads and generic exports (lower-case, trimmed).
-  const ALIASES = {
+  const ALIASES: Record<string, string[]> = {
     name: ['campaign name', 'campaign', 'ad set name', 'ad name', 'name'],
     platform: ['platform', 'publisher platform', 'channel', 'network'],
     objective: ['objective', 'campaign objective', 'campaign type', 'buying type objective'],
@@ -91,7 +92,7 @@
 
   // ---------- Parsing helpers ----------
 
-  function normHeader(h) {
+  function normHeader(h: unknown): string {
     return String(h || '')
       .toLowerCase()
       .replace(/\((inr|usd|eur|gbp|aud|cad|sgd|aed)\)/g, '')
@@ -99,7 +100,7 @@
       .trim();
   }
 
-  function detectCurrency(headers) {
+  function detectCurrency(headers: string[]): string | null {
     for (const h of headers) {
       const m = String(h).match(/\((INR|USD|EUR|GBP|AUD|CAD|SGD|AED)\)/i);
       if (m) return m[1].toUpperCase();
@@ -107,7 +108,7 @@
     return null;
   }
 
-  function parseNumber(v) {
+  function parseNumber(v: unknown): number | null {
     if (v === null || v === undefined) return null;
     if (typeof v === 'number') return Number.isFinite(v) ? v : null;
     let s = String(v).trim();
@@ -119,9 +120,9 @@
     return pct ? n / 100 : n;
   }
 
-  function parseDate(v) {
+  function parseDate(v: unknown): string | null {
     if (v === null || v === undefined || v === '') return null;
-    if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
+    if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
     if (typeof v === 'number' && v > 20000 && v < 80000) {
       // Excel serial date
       const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
@@ -133,10 +134,10 @@
     m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); // dd/mm/yyyy (India default)
     if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
     const d = new Date(s);
-    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
   }
 
-  function guessObjective(text) {
+  function guessObjective(text: unknown): ObjectiveKey | null {
     const t = String(text || '').toLowerCase();
     if (!t) return null;
     if (/lead/.test(t)) return 'leads';
@@ -149,9 +150,9 @@
   }
 
   /** Build {field: headerIndex} from a header row. */
-  function mapColumns(headers) {
+  function mapColumns(headers: string[]): Record<string, number> {
     const norm = headers.map(normHeader);
-    const map = {};
+    const map: Record<string, number> = {};
     for (const [field, aliases] of Object.entries(ALIASES)) {
       let idx = -1;
       for (const a of aliases) {
@@ -167,7 +168,7 @@
     return map;
   }
 
-  function detectPlatform(headers) {
+  function detectPlatform(headers: string[]): string | null {
     const n = headers.map(normHeader);
     if (n.includes('amount spent') || n.includes('reporting starts') || n.includes('result indicator')) return 'Meta';
     if (n.includes('impr.') || n.includes('all conv.') || n.includes('avg. cpc')) return 'Google';
@@ -178,7 +179,7 @@
    * Turn spreadsheet rows (array of arrays, first row = headers) into campaigns.
    * Rows sharing a campaign name are merged (daily or ad-set breakdowns).
    */
-  function rowsToCampaigns(rows, opts = {}) {
+  function rowsToCampaigns(rows: unknown[][], opts: { platform?: string } = {}) {
     if (!rows || rows.length < 2) return { campaigns: [], mapping: {}, warnings: ['The file has no data rows.'] };
     const headers = rows[0].map((h) => String(h ?? ''));
     const mapping = mapColumns(headers);
@@ -188,14 +189,14 @@
     if (mapping.name === undefined) warnings.push('No campaign name column found; rows were named "Campaign 1", "Campaign 2"….');
     if (mapping.spend === undefined) warnings.push('No spend column found. Add spend by hand to get cost metrics.');
 
-    const byName = new Map();
+    const byName = new Map<string, Rec>();
     rows.slice(1).forEach((r, i) => {
       if (!r || r.every((c) => c === null || c === undefined || String(c).trim() === '')) return;
-      const get = (f) => (mapping[f] === undefined ? undefined : r[mapping[f]]);
+      const get = (f: string): unknown => (mapping[f] === undefined ? undefined : r[mapping[f]]);
       const rawName = String(get('name') ?? '').trim();
       if (/^(total|results from|grand total)/i.test(rawName)) return; // skip export summary rows
       const name = rawName || `Campaign ${i + 1}`;
-      const c = { name };
+      const c: Rec = { name };
       for (const f of ['budget', 'spend', 'impressions', 'reach', 'frequency', 'clicks', 'views', 'landingPageViews', 'leads', 'qualifiedLeads', 'conversions', 'conversionValue', 'universe']) {
         const v = parseNumber(get(f));
         if (v !== null) c[f] = v;
@@ -218,7 +219,7 @@
       if (notes) c.targetingNotes = String(notes);
 
       if (!byName.has(name)) byName.set(name, c);
-      else mergeInto(byName.get(name), c);
+      else mergeInto(byName.get(name) as Rec, c);
     });
 
     const campaigns = [...byName.values()].map((c) => normaliseCampaign({ ...c, currency: currency || undefined }));
@@ -226,7 +227,7 @@
     return { campaigns, mapping, headers, currency, warnings };
   }
 
-  function mergeInto(a, b) {
+  function mergeInto(a: Rec, b: Rec): void {
     for (const f of ADDITIVE) if (b[f] !== undefined) a[f] = (a[f] || 0) + b[f];
     if (b.reach !== undefined) a.reach = Math.max(a.reach || 0, b.reach);
     if (b.universe !== undefined) a.universe = Math.max(a.universe || 0, b.universe);
@@ -237,45 +238,45 @@
   }
 
   let idCounter = 0;
-  function newId() {
+  function newId(): string {
     idCounter += 1;
     return 'c' + Date.now().toString(36) + idCounter.toString(36);
   }
 
-  function normaliseCampaign(c) {
-    const out = { id: c.id || newId(), targeting: 'auto', platform: 'Other', ...c };
+  function normaliseCampaign(c: Partial<Campaign>): Campaign {
+    const out: Rec = { id: c.id || newId(), targeting: 'auto', platform: 'Other', ...c };
     for (const f of FIELDS) {
       if (['int', 'num', 'money'].includes(f.type) && out[f.key] !== undefined && out[f.key] !== null) {
         const n = parseNumber(out[f.key]);
         out[f.key] = n === null ? undefined : n;
       }
     }
-    return out;
+    return out as Campaign;
   }
 
   // ---------- Metrics ----------
 
-  const div = (a, b) => (isNum(a) && isNum(b) && b > 0 ? a / b : null);
-  function isNum(v) {
+  const div = (a: unknown, b: unknown): number | null => (isNum(a) && isNum(b) && b > 0 ? a / b : null);
+  function isNum(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v);
   }
 
-  function durationDays(c) {
+  function durationDays(c: Partial<Campaign>): number | null {
     if (!c.startDate || !c.endDate) return null;
     const d = (Date.parse(c.endDate) - Date.parse(c.startDate)) / 86400000;
     return isNaN(d) ? null : Math.max(1, Math.round(d) + 1);
   }
 
-  function objectiveOf(c) {
+  function objectiveOf(c: Partial<Campaign>): ObjectiveKey | null {
     return c.objective && OBJECTIVES[c.objective] ? c.objective : null;
   }
 
-  function computeMetrics(c) {
+  function computeMetrics(c: Partial<Campaign>): Metrics {
     // A zero in a tracking column usually means "not tracked" (e.g. instant forms have no landing page), not a real zero.
     if (c.landingPageViews === 0) c = { ...c, landingPageViews: undefined };
     const days = durationDays(c);
     const frequency = isNum(c.frequency) && c.frequency > 0 ? c.frequency : div(c.impressions, c.reach);
-    const m = {
+    const m: Metrics = {
       days,
       spend: isNum(c.spend) ? c.spend : null,
       budget: isNum(c.budget) ? c.budget : null,
@@ -311,16 +312,16 @@
   // ---------- Funnel levels ----------
 
   /** Levels the campaign is *aiming* at (objective, or the user's override). */
-  function targetLevels(c) {
+  function targetLevels(c: Partial<Campaign>): number[] {
     if (Array.isArray(c.levels) && c.levels.length) return [...c.levels].sort();
     const o = objectiveOf(c);
     return o ? OBJECTIVES[o].levels : [];
   }
 
   /** Levels the campaign has *data* for. */
-  function dataLevels(c) {
-    const has = (k) => isNum(c[k]) && c[k] > 0;
-    const lv = [];
+  function dataLevels(c: Partial<Campaign>): number[] {
+    const has = (k: string): boolean => isNum(c[k]) && c[k] > 0;
+    const lv: number[] = [];
     if (has('impressions') || has('reach')) lv.push(1);
     if (has('frequency') || (has('impressions') && has('reach'))) lv.push(2);
     if (has('clicks') || has('views')) lv.push(3);
@@ -331,8 +332,8 @@
 
   // ---------- Targeting ----------
 
-  function classifyTargeting(c, settings = DEFAULT_SETTINGS) {
-    if (c.targeting && c.targeting !== 'auto' && TARGETING[c.targeting]) return { type: c.targeting, reason: 'Set by you.' };
+  function classifyTargeting(c: Partial<Campaign>, settings: Settings = DEFAULT_SETTINGS): { type: TargetingType; reason: string } {
+    if (c.targeting && c.targeting !== 'auto' && TARGETING[c.targeting as TargetingType]) return { type: c.targeting as TargetingType, reason: 'Set by you.' };
     const notes = String(c.targetingNotes || '').toLowerCase();
     if (/(advantage\+|advantage plus|broad|no detailed targeting|open targeting)/.test(notes)) return { type: 'open', reason: 'Targeting notes mention broad / Advantage+ audiences.' };
     if (/(lookalike|look-alike|custom audience|retarget|remarket|website visitors|customer list|engaged)/.test(notes)) return { type: 'focused', reason: 'Targeting notes mention a lookalike, custom or retargeting audience.' };
@@ -349,7 +350,7 @@
   // ---------- Missing data ----------
 
   /** Inputs that matter for this campaign and are missing or zero. */
-  function missingInputs(c) {
+  function missingInputs(c: Partial<Campaign>): string[] {
     const o = objectiveOf(c);
     const need = ['spend', 'startDate', 'endDate', 'impressions', 'universe'];
     if (!o) need.unshift('objective');
@@ -368,7 +369,8 @@
   // ---------- Comparison ----------
 
   // lower = better unless `higher: true`
-  const METRIC_DEFS = {
+  // Raw counts (clicks, views…) have no entry: they are shown but never ranked.
+  const METRIC_DEFS: Partial<Record<MetricKey, MetricDef>> = {
     cpl: { label: 'Cost per lead (CPL)', fmt: 'money' },
     cpql: { label: 'Cost per qualified lead', fmt: 'money' },
     cpm: { label: 'Cost per 1,000 impressions (CPM)', fmt: 'money' },
@@ -399,26 +401,26 @@
    * marketing contact uses: CPL & budget → universe & qualified % → duration.
    * For other objectives the cost metric of that funnel level replaces CPL.
    */
-  function comparisonTiers(objective) {
-    const primary = objective && OBJECTIVES[objective] ? OBJECTIVES[objective].primaryCost : 'cpl';
+  function comparisonTiers(objective: ObjectiveKey | null): Omit<Tier, 'ranks'>[] {
+    const primary: MetricKey = objective && OBJECTIVES[objective] ? OBJECTIVES[objective].primaryCost : 'cpl';
     return [
-      { tier: 1, title: 'Cost and budget', why: 'Compared first: what each result cost and how much money went in.', weight: 3, metrics: [primary, 'spend', 'budget', 'dailySpend'] },
+      { tier: 1, title: 'Cost and budget', why: 'Compared first: what each result cost and how much money went in.', weight: 3, metrics: [primary, 'spend', 'budget', 'dailySpend'] as MetricKey[] },
       { tier: 2, title: 'Audience and lead quality', why: 'Then: how big the audience was, how much of it you reached, and how many leads were worth having.', weight: 2, metrics: ['universe', 'penetration', 'qualifiedPct', 'cpql'] },
       { tier: 3, title: 'Duration', why: 'Then: how long each ran. Short runs may still be in the platform\'s learning phase.', weight: 1, metrics: ['days', 'leadsPerDay'] },
-      { tier: 4, title: 'Supporting signals', why: 'These explain the numbers above: creative pull, audience fatigue and landing-page friction.', weight: 0.5, metrics: ['cpm', 'ctr', 'cpc', 'frequency', 'lpvRate', 'leadConvRate', 'roas'].filter((k) => k !== primary) },
+      { tier: 4, title: 'Supporting signals', why: 'These explain the numbers above: creative pull, audience fatigue and landing-page friction.', weight: 0.5, metrics: ['cpm', 'ctr', 'cpc', 'frequency', 'lpvRate', 'leadConvRate', 'roas'].filter((k) => k !== primary) as MetricKey[] },
     ];
   }
 
-  function dominantObjective(campaigns) {
-    const counts = {};
+  function dominantObjective(campaigns: Campaign[]): ObjectiveKey {
+    const counts: Record<string, number> = {};
     for (const c of campaigns) {
       const o = objectiveOf(c) || 'leads';
       counts[o] = (counts[o] || 0) + 1;
     }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'leads';
+    return (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'leads') as ObjectiveKey;
   }
 
-  function median(arr) {
+  function median(arr: unknown[]): number | null {
     const a = arr.filter(isNum).sort((x, y) => x - y);
     if (!a.length) return null;
     const mid = Math.floor(a.length / 2);
@@ -426,12 +428,12 @@
   }
 
   /** Rank campaigns on one metric. Returns {values: {id: v}, best, worst}. */
-  function rankMetric(key, items) {
-    const def = METRIC_DEFS[key] || {};
-    const vals = items.map((it) => ({ id: it.c.id, v: it.m[key] })).filter((x) => isNum(x.v));
-    const res = { key, values: Object.fromEntries(items.map((it) => [it.c.id, it.m[key]])), best: null, worst: null, spread: null };
+  function rankMetric(key: MetricKey, items: CompareItem[]): MetricRank & { spread: number | null } {
+    const def: Partial<MetricDef> = METRIC_DEFS[key] || {};
+    const vals = items.map((it) => ({ id: it.c.id, v: it.m[key] as number })).filter((x) => isNum(x.v));
+    const res: MetricRank = { key, values: Object.fromEntries(items.map((it) => [it.c.id, it.m[key]])), best: null, worst: null, spread: null };
     if (vals.length < 2 || def.neutral) return res;
-    let sorted;
+    let sorted: { id: string; v: number }[];
     if (def.band) {
       const mid = (def.band[0] + def.band[1]) / 2;
       sorted = [...vals].sort((a, b) => Math.abs(a.v - mid) - Math.abs(b.v - mid));
@@ -447,15 +449,15 @@
   }
 
   /** Two-proportion z-test; returns two-sided p-value or null. */
-  function twoProportionP(x1, n1, x2, n2) {
-    if (![x1, n1, x2, n2].every(isNum) || n1 <= 0 || n2 <= 0) return null;
+  function twoProportionP(x1: unknown, n1: unknown, x2: unknown, n2: unknown): number | null {
+    if (!isNum(x1) || !isNum(n1) || !isNum(x2) || !isNum(n2) || n1 <= 0 || n2 <= 0) return null;
     const p1 = x1 / n1, p2 = x2 / n2, p = (x1 + x2) / (n1 + n2);
     const se = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
     if (se === 0) return null;
     const z = Math.abs(p1 - p2) / se;
     return 2 * (1 - normCdf(z));
   }
-  function normCdf(z) {
+  function normCdf(z: number): number {
     // Abramowitz–Stegun approximation
     const t = 1 / (1 + 0.2316419 * z);
     const d = 0.3989423 * Math.exp((-z * z) / 2);
@@ -463,13 +465,13 @@
     return 1 - prob;
   }
 
-  function compare(campaigns, settings = DEFAULT_SETTINGS) {
-    const items = campaigns.map((c) => ({ c, m: computeMetrics(c), targeting: classifyTargeting(c, settings), levels: targetLevels(c), dataLevels: dataLevels(c) }));
+  function compare(campaigns: Campaign[], settings: Settings = DEFAULT_SETTINGS): CompareResult {
+    const items: CompareItem[] = campaigns.map((c) => ({ c, m: computeMetrics(c), targeting: classifyTargeting(c, settings), levels: targetLevels(c), dataLevels: dataLevels(c) }));
     const objective = dominantObjective(campaigns);
-    const tiers = comparisonTiers(objective).map((t) => ({ ...t, ranks: t.metrics.map((k) => rankMetric(k, items)) }));
+    const tiers: Tier[] = comparisonTiers(objective).map((t) => ({ ...t, ranks: t.metrics.map((k) => rankMetric(k, items)) }));
 
     // weighted score: winning a metric earns the tier weight, losing costs it
-    const scores = Object.fromEntries(items.map((it) => [it.c.id, 0]));
+    const scores: Record<string, number> = Object.fromEntries(items.map((it) => [it.c.id, 0]));
     for (const t of tiers) for (const r of t.ranks) {
       if (r.best) scores[r.best] += t.weight;
       if (r.worst && r.worst !== r.best) scores[r.worst] -= t.weight / 2;
@@ -480,37 +482,36 @@
     const sharedLevels = items.length ? items.map((it) => it.levels).reduce((acc, lv) => acc.filter((x) => lv.includes(x))) : [];
 
     // significance of qualified-% and CTR differences between best and worst
-    const significance = [];
+    const significance: CompareResult['significance'] = [];
     const q = tiers[1].ranks.find((r) => r.key === 'qualifiedPct');
     if (q && q.best && q.worst && q.best !== q.worst) {
-      const a = items.find((it) => it.c.id === q.best).c, b = items.find((it) => it.c.id === q.worst).c;
+      const a = (items.find((it) => it.c.id === q.best) as CompareItem).c, b = (items.find((it) => it.c.id === q.worst) as CompareItem).c;
       significance.push({ key: 'qualifiedPct', p: twoProportionP(a.qualifiedLeads, a.leads, b.qualifiedLeads, b.leads), best: q.best, worst: q.worst });
     }
     const ctr = rankMetric('ctr', items);
     if (ctr.best && ctr.worst && ctr.best !== ctr.worst) {
-      const a = items.find((it) => it.c.id === ctr.best).c, b = items.find((it) => it.c.id === ctr.worst).c;
+      const a = (items.find((it) => it.c.id === ctr.best) as CompareItem).c, b = (items.find((it) => it.c.id === ctr.worst) as CompareItem).c;
       significance.push({ key: 'ctr', p: twoProportionP(a.clicks, a.impressions, b.clicks, b.impressions), best: ctr.best, worst: ctr.worst });
     }
 
-    const result = { items, objective, tiers, scores, ranking, mixedObjectives, sharedLevels, significance, settings };
-    result.insights = buildInsights(result);
-    result.commonality = commonAndDifferent(result);
-    result.recommendations = buildRecommendations(result);
-    return result;
+    const partial = { items, objective, tiers, scores, ranking, mixedObjectives, sharedLevels, significance, settings } as CompareResult;
+    partial.insights = buildInsights(partial);
+    partial.commonality = commonAndDifferent(partial);
+    partial.recommendations = buildRecommendations(partial);
+    return partial;
   }
 
   // ---------- Insights (rules engine) ----------
 
-  function buildInsights(r) {
+  function buildInsights(r: CompareResult): CompareResult['insights'] {
     const { items, settings } = r;
-    const med = (k) => median(items.map((it) => it.m[k]));
+    const med = (k: MetricKey): number | null => median(items.map((it) => it.m[k]));
     const medCpl = med('cpl'), medCpm = med('cpm'), medCtr = med('ctr');
-    const out = {};
+    const out: CompareResult['insights'] = {};
     for (const it of items) {
       const { c, m } = it;
-      const s = [], w = [];
+      const s: string[] = [], w: string[] = [];
       const obj = objectiveOf(c);
-      const name = c.name;
 
       if (isNum(m.cpl) && isNum(medCpl) && items.length > 1) {
         if (m.cpl <= medCpl * 0.8) s.push(`Leads came ${pctDiff(m.cpl, medCpl)} cheaper than the group's middle CPL.`);
@@ -559,40 +560,40 @@
     return out;
   }
 
-  function commonAndDifferent(r) {
+  function commonAndDifferent(r: CompareResult): CompareResult['commonality'] {
     const { items } = r;
     if (items.length < 2) return { common: [], different: [] };
-    const common = [], different = [];
-    const same = (f, label, fmt = (x) => x) => {
+    const common: string[] = [], different: string[] = [];
+    const same = (f: (it: CompareItem) => unknown, label: string, fmt: (x: any) => string = (x) => String(x)): void => {
       const vals = items.map(f);
       const uniq = [...new Set(vals.map(String))];
       if (uniq.length === 1 && vals[0] !== null && vals[0] !== undefined && vals[0] !== 'unknown') common.push(`${label}: ${fmt(vals[0])}`);
       else different.push(`${label}: ${items.map((it, i) => `${it.c.name} — ${vals[i] === null || vals[i] === undefined ? 'not set' : fmt(vals[i])}`).join('; ')}`);
     };
     same((it) => it.c.platform, 'Platform');
-    same((it) => objectiveOf(it.c), 'Objective', (o) => OBJECTIVES[o]?.label || o);
-    same((it) => it.targeting.type, 'Targeting', (t) => TARGETING[t]);
-    same((it) => it.levels.join(','), 'Funnel levels aimed at', (s) => (s ? s.split(',').map((l) => 'L' + l).join(' + ') : 'not set'));
-    const spreads = [];
+    same((it) => objectiveOf(it.c), 'Objective', (o: ObjectiveKey) => OBJECTIVES[o]?.label || o);
+    same((it) => it.targeting.type, 'Targeting', (t: TargetingType) => TARGETING[t]);
+    same((it) => it.levels.join(','), 'Funnel levels aimed at', (s: string) => (s ? s.split(',').map((l) => 'L' + l).join(' + ') : 'not set'));
+    const spreads: { t: number; rk: MetricRank }[] = [];
     for (const t of r.tiers) for (const rk of t.ranks) if (isNum(rk.spread) && rk.spread >= 0.25) spreads.push({ t: t.tier, rk });
     // keep the order of importance, and only the five biggest gaps
-    spreads.sort((a, b) => a.t - b.t || b.rk.spread - a.rk.spread).slice(0, 5).forEach(({ rk }) => {
+    spreads.sort((a, b) => a.t - b.t || (b.rk.spread ?? 0) - (a.rk.spread ?? 0)).slice(0, 5).forEach(({ rk }) => {
       const best = items.find((it) => it.c.id === rk.best), worst = items.find((it) => it.c.id === rk.worst);
-      different.push(`${METRIC_DEFS[rk.key].label}: ${best ? best.c.name : ''} is best, ${worst ? worst.c.name : ''} weakest (${Math.round(rk.spread * 100)}% apart)`);
+      different.push(`${METRIC_DEFS[rk.key]?.label}: ${best ? best.c.name : ''} is best, ${worst ? worst.c.name : ''} weakest (${Math.round((rk.spread ?? 0) * 100)}% apart)`);
     });
     return { common, different };
   }
 
   // ---------- Recommendations ----------
 
-  function buildRecommendations(r) {
+  function buildRecommendations(r: CompareResult): CompareResult['recommendations'] {
     const { items, settings, ranking } = r;
-    const recs = { improve: {}, newCampaign: [], reallocation: null };
+    const recs: CompareResult['recommendations'] = { improve: {}, newCampaign: [], reallocation: null };
     const byId = Object.fromEntries(items.map((it) => [it.c.id, it]));
 
     for (const it of items) {
       const { c, m } = it;
-      const list = [];
+      const list: string[] = [];
       if (isNum(m.frequency) && m.frequency > 3.5) list.push('Refresh the creative (new hook, new visual) and widen the audience to bring frequency under 3.');
       if (isNum(m.ctr) && m.ctr < 0.008) list.push('Test 2–3 new creatives with a clearer first line and a visible offer; keep the one with the best CTR after 3–4 days.');
       if (isNum(m.qualifiedPct) && m.qualifiedPct < settings.targetQualifiedPct) list.push('Add a qualifying question to the lead form (budget, location or timeline) and switch the form to "higher intent" so fewer casual leads get through.');
@@ -611,7 +612,7 @@
     const lead = byId[ranking[0]];
     if (lead) {
       const lm = lead.m;
-      const obj = objectiveOf(lead.c) || r.objective;
+      const obj: ObjectiveKey = objectiveOf(lead.c) || r.objective || 'leads';
       recs.newCampaign.push(`Objective: ${OBJECTIVES[obj]?.label || 'Leads'}, the same as the best performer (${lead.c.name}).`);
       if (lead.targeting.type !== 'unknown') recs.newCampaign.push(`Targeting: start ${TARGETING[lead.targeting.type].toLowerCase()}, which worked best here${isNum(lead.c.universe) ? `, with a universe around ${fmtCompact(lead.c.universe)}` : ''}.`);
       recs.newCampaign.push(`Duration: at least 14 days, so the platform finishes learning and you have enough leads to judge quality.`);
@@ -646,34 +647,34 @@
 
   // ---------- Formatting ----------
 
-  function fmtMoney(v, currency = 'INR') {
+  function fmtMoney(v: number | null | undefined, currency = 'INR'): string {
     if (!isNum(v)) return '—';
-    const opts = { style: 'currency', currency, maximumFractionDigits: v >= 100 ? 0 : 2 };
+    const opts: Intl.NumberFormatOptions = { style: 'currency', currency, maximumFractionDigits: v >= 100 ? 0 : 2 };
     try {
       return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', opts).format(v);
     } catch (e) {
       return currency + ' ' + v.toFixed(2);
     }
   }
-  function fmtPct(v) {
+  function fmtPct(v: number | null | undefined): string {
     if (!isNum(v)) return '—';
     return (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%';
   }
-  function fmtInt(v) {
+  function fmtInt(v: number | null | undefined): string {
     if (!isNum(v)) return '—';
     return new Intl.NumberFormat('en-IN').format(Math.round(v));
   }
-  function fmtCompact(v) {
+  function fmtCompact(v: number | null | undefined): string {
     if (!isNum(v)) return '—';
     if (v >= 1e7) return (v / 1e7).toFixed(v >= 1e8 ? 0 : 1) + ' crore';
     if (v >= 1e5) return (v / 1e5).toFixed(v >= 1e6 ? 0 : 1) + ' lakh';
     return fmtInt(v);
   }
-  function pctDiff(a, b) {
+  function pctDiff(a: number, b: number): string {
     return Math.round(Math.abs(a / b - 1) * 100) + '%';
   }
-  function formatMetric(key, v, currency) {
-    const def = METRIC_DEFS[key] || {};
+  function formatMetric(key: MetricKey, v: number | null | undefined, currency?: string): string {
+    const def: Partial<MetricDef> = METRIC_DEFS[key] || {};
     switch (def.fmt) {
       case 'money': return fmtMoney(v, currency);
       case 'pct': return fmtPct(v);
@@ -685,31 +686,112 @@
 
   // ---------- Exports ----------
 
-  function toRows(result) {
-    const keys = ['spend', 'budget', 'days', 'dailySpend', 'impressions', 'reach', 'frequency', 'cpm', 'clicks', 'ctr', 'cpc', 'views', 'costPerView', 'landingPageViews', 'lpvRate', 'leads', 'cpl', 'leadConvRate', 'qualifiedLeads', 'qualifiedPct', 'cpql', 'conversions', 'cpa', 'roas', 'universe', 'penetration'];
+  function toRows(result: CompareResult): unknown[][] {
+    const keys: MetricKey[] = ['spend', 'budget', 'days', 'dailySpend', 'impressions', 'reach', 'frequency', 'cpm', 'clicks', 'ctr', 'cpc', 'views', 'costPerView', 'landingPageViews', 'lpvRate', 'leads', 'cpl', 'leadConvRate', 'qualifiedLeads', 'qualifiedPct', 'cpql', 'conversions', 'cpa', 'roas', 'universe', 'penetration'];
     const head = ['Campaign', 'Platform', 'Objective', 'Targeting', 'Start', 'End', 'Score', ...keys.map((k) => (METRIC_DEFS[k] ? METRIC_DEFS[k].label : k))];
-    const rows = [head];
+    const rows: unknown[][] = [head];
     for (const it of result.items) {
-      rows.push([it.c.name, it.c.platform, OBJECTIVES[objectiveOf(it.c)]?.label || '', TARGETING[it.targeting.type], it.c.startDate || '', it.c.endDate || '', result.scores[it.c.id], ...keys.map((k) => (isNum(it.m[k]) ? +it.m[k].toFixed(4) : ''))]);
+      rows.push([it.c.name, it.c.platform, (it.c.objective && OBJECTIVES[it.c.objective as ObjectiveKey]?.label) || '', TARGETING[it.targeting.type], it.c.startDate || '', it.c.endDate || '', result.scores[it.c.id], ...keys.map((k) => (isNum(it.m[k]) ? +it.m[k].toFixed(4) : ''))]);
     }
     return rows;
   }
 
-  function toCsv(result) {
-    const esc = (v) => {
+  function toCsv(result: CompareResult): string {
+    const esc = (v: unknown): string => {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     return toRows(result).map((r) => r.map(esc).join(',')).join('\n');
   }
 
+  // ---------- Campaign list: search, status filter, sort, totals, export ----------
+  const isoStart = (c: Campaign): string => String(c.startedAt || c.startDate || '').slice(0, 10);
+  /** 'active' = delivering now; 'inactive' = paused, archived, finished, in review…; 'unknown' = no status (e.g. a CSV import). */
+  function statusKind(c: Partial<Campaign>): 'active' | 'inactive' | 'unknown' {
+    const s = String(c.status == null ? '' : c.status).trim().toUpperCase();
+    return !s ? 'unknown' : s === 'ACTIVE' ? 'active' : 'inactive';
+  }
+  /**
+   * Filters and sorts the campaign list. `q` matches the name (and, for ad sets and ads, the parent names).
+   * `sort`: 'default' keeps the given order, 'newest' / 'oldest' by start date (undated last), 'name' A–Z.
+   * Counts ignore the status filter so the buttons can show how many each choice would give.
+   */
+  function listView(items: Campaign[], opts?: Partial<ListViewOpts>): ListViewResult {
+    const o = opts || {};
+    const terms = String(o.q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const status: StatusFilter = o.status === 'active' || o.status === 'inactive' ? o.status : 'all';
+    const sort: ListSort = o.sort === 'newest' || o.sort === 'oldest' || o.sort === 'name' ? o.sort : 'default';
+    const hay = (c: Campaign): string => [c.name, c.adsetName, c.campaignName].filter(Boolean).join(' ').toLowerCase();
+    const searched = items.filter((c) => { const h = hay(c); return terms.every((t) => h.includes(t)); });
+    const counts = { all: searched.length, active: 0, inactive: 0 };
+    for (const c of searched) { const k = statusKind(c); if (k === 'active') counts.active++; else if (k === 'inactive') counts.inactive++; }
+    const out = status === 'all' ? searched.slice() : searched.filter((c) => statusKind(c) === status);
+    if (sort !== 'default') {
+      const byName = (a: Campaign, b: Campaign): number => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
+      const rank = new Map(out.map((c, i) => [c, i] as const));
+      const pos = (c: Campaign): number => rank.get(c) ?? 0;
+      out.sort((a, b) => {
+        if (sort === 'name') return byName(a, b) || pos(a) - pos(b);
+        const da = isoStart(a), db = isoStart(b);
+        if (!da !== !db) return da ? -1 : 1;
+        if (da !== db) return sort === 'newest' ? (da < db ? 1 : -1) : (da < db ? -1 : 1);
+        return pos(a) - pos(b);
+      });
+    }
+    return { items: out, counts, total: items.length, anyStatus: items.some((c) => statusKind(c) !== 'unknown') };
+  }
+
+  /**
+   * Adds up what the list is showing. Cost per lead and qualified % only use the rows that track leads
+   * (and, for qualified %, qualified leads), so a row without lead data can't distort them.
+   */
+  function listTotals(items: Campaign[]): ListTotals {
+    const t: ListTotals = { count: items.length, spend: 0, impressions: 0, clicks: 0, leads: 0, qualifiedLeads: 0, cpl: null, qualifiedPct: null };
+    let leadSpend = 0, qLeads = 0, qBase = 0;
+    for (const c of items) {
+      if (isNum(c.spend)) t.spend += c.spend;
+      if (isNum(c.impressions)) t.impressions += c.impressions;
+      if (isNum(c.clicks)) t.clicks += c.clicks;
+      if (isNum(c.leads) && c.leads > 0) {
+        t.leads += c.leads;
+        if (isNum(c.spend)) leadSpend += c.spend;
+        if (isNum(c.qualifiedLeads)) { qLeads += c.qualifiedLeads; qBase += c.leads; }
+      }
+    }
+    t.qualifiedLeads = qLeads;
+    t.cpl = div(leadSpend, t.leads);
+    t.qualifiedPct = div(qLeads, qBase);
+    return t;
+  }
+
+  /** The list as CSV rows (what is on screen, in that order), with a totals row at the end. */
+  function listToCsv(items: Campaign[]): string {
+    const esc = (v: unknown): string => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const num = (v: number | null | undefined): number | string => (isNum(v) ? +v.toFixed(4) : '');
+    const LEVEL: Record<string, string> = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
+    const head = ['Name', 'Level', 'Campaign', 'Ad set', 'Status', 'Started', 'Last active day', 'Platform', 'Objective', 'Spend', 'Impressions', 'Clicks', 'Leads', 'Cost per lead', 'Qualified leads', 'Qualified %'];
+    const rows: unknown[][] = [head];
+    for (const c of items) {
+      const m = computeMetrics(c);
+      const o = objectiveOf(c);
+      rows.push([c.name, LEVEL[c.level || ''] || '', c.campaignName || '', c.adsetName || '', c.status || '', isoStart(c), c.endDate || '', c.platform || '', o ? OBJECTIVES[o].label : '', num(m.spend), num(m.impressions), num(m.clicks), num(m.leads), num(m.cpl), num(m.qualifiedLeads), num(m.qualifiedPct)]);
+    }
+    const t = listTotals(items);
+    rows.push([`Total (${t.count})`, '', '', '', '', '', '', '', '', num(t.spend), num(t.impressions), num(t.clicks), num(t.leads), num(t.cpl), num(t.qualifiedLeads), num(t.qualifiedPct)]);
+    return rows.map((r) => r.map(esc).join(',')).join('\n');
+  }
+
   const api = {
-    FUNNEL_LEVELS, OBJECTIVES, PLATFORMS, TARGETING, DEFAULT_SETTINGS, FIELDS, METRIC_DEFS,
+    FUNNEL_LEVELS, OBJECTIVES, PLATFORMS, TARGETING, DEFAULT_SETTINGS, FIELDS, METRIC_DEFS: METRIC_DEFS as Record<MetricKey, MetricDef>,
     parseNumber, parseDate, mapColumns, rowsToCampaigns, normaliseCampaign, newId,
     durationDays, computeMetrics, targetLevels, dataLevels, classifyTargeting, missingInputs,
     comparisonTiers, compare, rankMetric, twoProportionP, median,
     fmtMoney, fmtPct, fmtInt, fmtCompact, formatMetric, toCsv, toRows, objectiveOf, isNum,
-  };
+    statusKind, listView, listTotals, listToCsv,
+  } as CoreApi;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CampaignCore = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(typeof window !== 'undefined' ? window : (globalThis as { CampaignCore?: CoreApi }));

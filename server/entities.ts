@@ -1,13 +1,13 @@
 // Builds analyser-ready campaign objects (the same shape a CSV import produces)
 // from synced Meta data, for any level (campaign, ad set, ad) and date range.
-'use strict';
-const M = require('./meta/map.js');
+import type { MapApi } from './meta/map.ts';
+const M: MapApi = require('./meta/map.ts');
 
-const LEVELS = ['campaign', 'adset', 'ad'];
+const LEVELS: EntityLevel[] = ['campaign', 'adset', 'ad'];
 const MANUAL_KEYS = ['qualifiedLeads', 'universe', 'budget', 'targeting', 'targetingNotes', 'objective', 'levels', 'notes'];
 
-function cleanManual(input) {
-  const out = {};
+function cleanManual(input: Row): Row {
+  const out: Row = {};
   for (const k of MANUAL_KEYS) {
     if (!(k in input)) continue;
     const v = input[k];
@@ -16,7 +16,7 @@ function cleanManual(input) {
       const n = Number(v);
       if (Number.isFinite(n) && n >= 0) out[k] = n;
     } else if (k === 'levels') {
-      if (Array.isArray(v)) out[k] = v.map(Number).filter((x) => x >= 1 && x <= 5);
+      if (Array.isArray(v)) out[k] = v.map(Number).filter((x: number) => x >= 1 && x <= 5);
     } else if (k === 'targeting') {
       if (['auto', 'open', 'loose', 'focused'].includes(v)) out[k] = v;
     } else {
@@ -26,22 +26,23 @@ function cleanManual(input) {
   return out;
 }
 
-/**
- * @param {object} o
- * @param {object} o.db
- * @param {string} o.userId
- * @param {string} o.accountId
- * @param {'campaign'|'adset'|'ad'} o.level
- * @param {string} o.since  YYYY-MM-DD
- * @param {string} o.until  YYYY-MM-DD
- * @param {Object<string,{reach:number,frequency:number}>} [o.reach]  unique reach for the range, by entity id
- */
-async function buildCampaigns({ db, userId, accountId, level, since, until, reach = {} }) {
+interface BuildOpts {
+  db: Db;
+  userId: string;
+  accountId: string;
+  level: EntityLevel;
+  since: string;   // YYYY-MM-DD
+  until: string;   // YYYY-MM-DD
+  /** Unique reach for the range, by entity id. */
+  reach?: Record<string, { reach: number; frequency: number }>;
+}
+
+async function buildCampaigns({ db, userId, accountId, level, since, until, reach = {} }: BuildOpts): Promise<{ currency: string; campaigns: Campaign[] }> {
   if (!LEVELS.includes(level)) throw new Error('Unknown level');
   const account = await db.get('SELECT * FROM ad_accounts WHERE user_id = ? AND id = ?', userId, accountId);
   const currency = account?.currency || 'INR';
   const ents = await db.all('SELECT * FROM entities WHERE user_id = ? AND account_id = ?', userId, accountId);
-  const byId = Object.fromEntries(ents.map((e) => [e.id, e]));
+  const byId: Record<string, Row> = Object.fromEntries(ents.map((e) => [e.id, e]));
   const keyCol = level === 'campaign' ? 'campaign_id' : level === 'adset' ? 'adset_id' : 'ad_id';
 
   const days = await db.all(`SELECT ${keyCol} AS k, date, SUM(spend) AS spend, SUM(impressions) AS impressions, SUM(clicks) AS clicks,
@@ -49,34 +50,41 @@ async function buildCampaigns({ db, userId, accountId, level, since, until, reac
       COUNT(lpv) AS lpv_n, COUNT(leads) AS leads_n, COUNT(conversions) AS conv_n, COUNT(views) AS views_n
     FROM daily WHERE user_id = ? AND account_id = ? AND date BETWEEN ? AND ? GROUP BY ${keyCol}, date ORDER BY date`, userId, accountId, since, until);
 
-  const manualRows = await db.all('SELECT entity_id, json FROM manual_inputs WHERE user_id = ?', userId);
-  const manual = Object.fromEntries(manualRows.map((r) => [r.entity_id, JSON.parse(r.json)]));
+  // When each one started: Meta's own start time where it has one (campaigns, ad sets), otherwise the first
+  // day with spend in the synced history (ads, which have no start time of their own).
+  const firstRows = await db.all(`SELECT ${keyCol} AS k, MIN(date) AS first FROM daily
+    WHERE user_id = ? AND account_id = ? AND (spend > 0 OR impressions > 0) GROUP BY ${keyCol}`, userId, accountId);
+  const firstSpend = Object.fromEntries(firstRows.map((r) => [r.k, r.first]));
 
-  const groups = new Map();
+  const manualRows = await db.all('SELECT entity_id, json FROM manual_inputs WHERE user_id = ?', userId);
+  const manual: Record<string, Row> = Object.fromEntries(manualRows.map((r) => [r.entity_id, JSON.parse(r.json)]));
+
+  const groups = new Map<string, Row[]>();
   for (const d of days) {
     if (!d.k) continue;
-    if (!groups.has(d.k)) groups.set(d.k, []);
-    groups.get(d.k).push(d);
+    let g = groups.get(d.k);
+    if (!g) { g = []; groups.set(d.k, g); }
+    g.push(d);
   }
-  const adsetsOf = (campaignId) => ents.filter((e) => e.level === 'adset' && e.campaign_id === campaignId);
+  const adsetsOf = (campaignId: string): Row[] => ents.filter((e) => e.level === 'adset' && e.campaign_id === campaignId);
 
-  const out = [];
+  const out: Campaign[] = [];
   for (const [id, series] of groups) {
     const e = byId[id];
     if (!e) continue;
     const live = series.filter((d) => d.spend > 0 || d.impressions > 0);
     if (!live.length) continue;
-    const sum = (k) => series.reduce((a, d) => a + (d[k] || 0), 0);
-    const tracked = (k, n) => (series.some((d) => d[n] > 0) ? sum(k) : undefined);
+    const sum = (k: string): number => series.reduce((a, d) => a + (d[k] || 0), 0);
+    const tracked = (k: string, n: string): number | undefined => (series.some((d) => d[n] > 0) ? sum(k) : undefined);
     const campaign = byId[e.campaign_id];
     const adset = e.adset_id ? byId[e.adset_id] : null;
 
     // Budget for this range.
-    let budget;
+    let budget: number | undefined;
     if (level === 'campaign') {
       budget = M.budgetForRange(e, since, until, currency);
       if (!budget) {
-        const parts = adsetsOf(e.id).map((s) => M.budgetForRange(s, since, until, currency)).filter(Boolean);
+        const parts = adsetsOf(e.id).map((s) => M.budgetForRange(s, since, until, currency)).filter((p): p is number => p !== undefined);
         if (parts.length) budget = parts.reduce((a, b) => a + b, 0);
       }
     } else if (level === 'adset') {
@@ -84,7 +92,7 @@ async function buildCampaigns({ db, userId, accountId, level, since, until, reac
     }
 
     // Audience size and targeting description.
-    let universe, notes;
+    let universe: number | undefined, notes: string | undefined;
     if (level === 'campaign') {
       const sets = adsetsOf(e.id);
       const us = sets.map((s) => s.universe).filter(Boolean);
@@ -97,7 +105,7 @@ async function buildCampaigns({ db, userId, accountId, level, since, until, reac
     }
 
     const r = reach[id] || {};
-    const base = {
+    const base: Campaign = {
       id: e.id,
       source: 'meta',
       level,
@@ -109,6 +117,7 @@ async function buildCampaigns({ db, userId, accountId, level, since, until, reac
       campaignName: level !== 'campaign' ? campaign?.name : undefined,
       adsetName: level === 'ad' ? adset?.name : undefined,
       thumbnailUrl: e.thumbnail_url || undefined,
+      startedAt: M.dateOnly(e.start_time) || firstSpend[id] || live[0].date,
       startDate: live[0].date,
       endDate: live[live.length - 1].date,
       budget,
@@ -135,8 +144,10 @@ async function buildCampaigns({ db, userId, accountId, level, since, until, reac
     base.manualKeys = Object.keys(man).filter((k) => man[k] !== null && man[k] !== undefined);
     out.push(base);
   }
-  out.sort((a, b) => b.spend - a.spend);
+  out.sort((a, b) => (b.spend ?? 0) - (a.spend ?? 0));
   return { currency, campaigns: out };
 }
 
-module.exports = { buildCampaigns, cleanManual, LEVELS, MANUAL_KEYS };
+const api = { buildCampaigns, cleanManual, LEVELS, MANUAL_KEYS };
+module.exports = api;
+export type EntitiesApi = typeof api;

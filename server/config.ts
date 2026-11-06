@@ -3,25 +3,25 @@
 //   - demo:    no META_APP_ID; a simulated Meta account, only on this computer
 //   - local:   your Meta app, data in data/analyser.db (node:sqlite)
 //   - hosted:  on Vercel, data in Turso (TURSO_DATABASE_URL), secrets from env vars
-'use strict';
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
+const fs: typeof import('node:fs') = require('node:fs');
+const path: typeof import('node:path') = require('node:path');
+const crypto: typeof import('node:crypto') = require('node:crypto');
 
 const ROOT = path.join(__dirname, '..');
 
-function loadEnvFile() {
+function loadEnvFile(): void {
   const file = path.join(ROOT, '.env');
   if (!fs.existsSync(file)) return;
   if (typeof process.loadEnvFile === 'function') { process.loadEnvFile(file); return; }
   for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    if (m && m[1] && !(m[1] in process.env)) process.env[m[1]] = (m[2] ?? '').replace(/^["']|["']$/g, '');
   }
 }
 
 /** A 32-byte key for encrypting tokens and signing cookies. */
-function secretKey(env, dataDir, hosted) {
+type Env = Record<string, string | undefined>;
+function secretKey(env: Env, dataDir: string, hosted: boolean): Buffer {
   if (env.APP_SECRET_KEY) {
     const k = Buffer.from(env.APP_SECRET_KEY, 'base64');
     if (k.length !== 32) throw new Error('APP_SECRET_KEY must be 32 random bytes in base64. Make one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"');
@@ -34,15 +34,15 @@ function secretKey(env, dataDir, hosted) {
 }
 
 /** 'token', 'oauth' or both. Forgiving about case, quotes and spaces; never leaves no way to sign in. */
-function loginModes(value) {
-  const modes = [...new Set(String(value || '').toLowerCase().replace(/["']/g, '').split(/[\s,;]+/).filter((m) => m === 'token' || m === 'oauth'))];
+function loginModes(value: string | undefined): ('token' | 'oauth')[] {
+  const modes = [...new Set(String(value || '').toLowerCase().replace(/["']/g, '').split(/[\s,;]+/).filter((m): m is 'token' | 'oauth' => m === 'token' || m === 'oauth'))];
   if (value && !modes.length) console.warn(`META_LOGIN_MODE="${value}" isn't token, oauth or token,oauth; using token.`);
   return modes.length ? modes : ['token'];
 }
 
-function loadConfig(overrides = {}) {
+function loadConfig(overrides: Env = {}) {
   loadEnvFile();
-  const env = { ...process.env, ...overrides };
+  const env: Env = { ...process.env, ...overrides };
   const hosted = !!env.VERCEL;
   const port = Number(env.PORT || 8787);
   const demo = env.DEMO === '1' || !env.META_APP_ID;
@@ -69,10 +69,11 @@ function loadConfig(overrides = {}) {
     baseUrl,
     hosted,
     dataDir,
-    db: tursoUrl ? { url: tursoUrl, authToken: env.TURSO_AUTH_TOKEN } : { file: env.DB_FILE || path.join(dataDir, 'analyser.db') },
+    db: (tursoUrl ? { url: tursoUrl, authToken: env.TURSO_AUTH_TOKEN } : { file: env.DB_FILE || path.join(dataDir, 'analyser.db') }) as { url?: string; authToken?: string; file?: string; client?: LibsqlClient },
     key: secretKey(env, dataDir, hosted),
     demo,
     cronSecret: env.CRON_SECRET || '',
+    allowDemoCallbacks: false,   // tests only: lets the Meta data-deletion callback run in demo mode
     meta: {
       appId: demo ? 'demo-app' : env.META_APP_ID,
       appSecret: demo ? 'demo-secret' : env.META_APP_SECRET,
@@ -84,7 +85,7 @@ function loadConfig(overrides = {}) {
     },
     // How people connect Meta: 'token' (paste an access token), 'oauth' (Facebook Login), or both.
     // Facebook Login for Business needs Business Verification, so token is the default.
-    loginModes: demo ? ['oauth', 'token'] : loginModes(env.META_LOGIN_MODE),
+    loginModes: (demo ? ['oauth', 'token'] : loginModes(env.META_LOGIN_MODE)) as ('token' | 'oauth')[],
     syncEveryHours: Number(env.SYNC_EVERY_HOURS || 24),
     // Longest a single sync step may run. Vercel's free plan stops functions at 300 s.
     syncStepMs: Number(env.SYNC_STEP_SECONDS || 240) * 1000,
@@ -93,4 +94,7 @@ function loadConfig(overrides = {}) {
   };
 }
 
-module.exports = { loadConfig, ROOT };
+const api = { loadConfig, ROOT };
+module.exports = api;
+export type ConfigApi = typeof api;
+export type Config = ReturnType<typeof loadConfig>;

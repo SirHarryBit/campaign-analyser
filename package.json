@@ -7,12 +7,12 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts && node --experimental-strip-types --no-warnings=ExperimentalWarning server/index.js",
-    "demo": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts && node --experimental-strip-types --no-warnings=ExperimentalWarning -e \"process.env.DEMO='1';require('./server/index.js')\"",
+    "start": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts && node --experimental-strip-types --no-warnings=ExperimentalWarning server/index.ts",
+    "demo": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts && node --experimental-strip-types --no-warnings=ExperimentalWarning -e \"process.env.DEMO='1';require('./server/index.ts')\"",
     "build": "node --experimental-strip-types --no-warnings=ExperimentalWarning build.ts",
-    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test tests/core.test.js tests/charts.test.ts tests/meta-map.test.js tests/server.test.js",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test tests/core.test.ts tests/charts.test.ts tests/meta-map.test.ts tests/server.test.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "dev": "nodemon --watch server --watch src --ext js,ts,html --exec \"npm start\""
+    "dev": "nodemon --watch server --watch src --ext ts,html --exec \"npm start\""
   },
   "license": "MIT",
   "dependencies": {

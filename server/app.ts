@@ -1,18 +1,26 @@
 // The HTTP app: Meta sign-in, the JSON API the browser calls, share links,
 // Meta's deletion callbacks and the daily sync (a timer locally, a cron job on Vercel).
 // Built on node:http request/response objects with no framework, so the same
-// `handle(req, res)` runs under `node server/index.js` and as a Vercel function.
-'use strict';
-const http = require('node:http');
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { openDb, USER_TABLES } = require('./db.js');
-const S = require('./security.js');
-const { GraphClient, MetaError } = require('./meta/client.js');
-const { syncStep, todayIn, addDays, HISTORY_CHOICES } = require('./meta/sync.js');
-const { buildCampaigns, cleanManual, LEVELS } = require('./entities.js');
-const { cleanSnapshot } = require('./snapshot.js');
+// `handle(req, res)` runs under `node server/index.ts` and as a Vercel function.
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Config } from './config.ts';
+import type { DbApi } from './db.ts';
+import type { SecurityApi } from './security.ts';
+import type { ClientApi } from './meta/client.ts';
+import type { SyncApi } from './meta/sync.ts';
+import type { EntitiesApi } from './entities.ts';
+import type { SnapshotApi } from './snapshot.ts';
+
+const http: typeof import('node:http') = require('node:http');
+const fs: typeof import('node:fs') = require('node:fs');
+const path: typeof import('node:path') = require('node:path');
+const crypto: typeof import('node:crypto') = require('node:crypto');
+const { openDb, USER_TABLES }: DbApi = require('./db.ts');
+const S: SecurityApi = require('./security.ts');
+const { GraphClient, MetaError }: ClientApi = require('./meta/client.ts');
+const { syncStep, todayIn, addDays, HISTORY_CHOICES }: SyncApi = require('./meta/sync.ts');
+const { buildCampaigns, cleanManual, LEVELS }: EntitiesApi = require('./entities.ts');
+const { cleanSnapshot }: SnapshotApi = require('./snapshot.ts');
 
 const SESSION_DAYS = 30;
 const JSON_LIMIT = 2 * 1024 * 1024;
@@ -21,10 +29,20 @@ const LEASE_MS = 310000; // a sync step that hasn't finished in this long has di
 const HARD_STOP_MS = 40000; // after the step budget, in-flight Meta calls get this long before the step ends itself
 
 class HttpError extends Error {
-  constructor(status, message, extra = {}) { super(message); this.status = status; this.extra = extra; }
+  status: number;
+  extra: Row;
+  constructor(status: number, message: string, extra: Row = {}) { super(message); this.status = status; this.extra = extra; }
 }
 
-async function createApp(config, { sleep, log = console } = {}) {
+interface RouteCtx { url: URL; m: RegExpMatchArray }
+type Handler = (req: Req, res: ServerResponse, ctx: RouteCtx) => unknown;
+/** A request as the app sees it; some hosts have already read the body and hang it on `body`. */
+type Req = IncomingMessage & { body?: unknown };
+type Session = Row;
+
+export type AppOptions = { sleep?: (ms: number) => Promise<void>; log?: Partial<Logger> };
+
+async function createApp(config: Config, { sleep, log = console }: AppOptions = {}) {
   const db = await openDb(config.db);
   const secure = config.baseUrl.startsWith('https://');
   // Browsers share cookies across ports on localhost; the __Host- prefix locks them down on HTTPS.
@@ -32,42 +50,42 @@ async function createApp(config, { sleep, log = console } = {}) {
   const OAUTH = secure ? '__Host-ca_oauth' : 'ca_oauth';
 
   const meta = config.meta;
-  const client = (token) => new GraphClient({ token, appSecret: meta.appSecret, version: meta.version, baseUrl: meta.graphUrl, sleep });
-  const track = (userId, kind, qty = 1) => db.run('INSERT INTO usage_events (user_id, kind, qty, at) VALUES (?, ?, ?, ?)', userId, kind, qty, Date.now());
+  const client = (token: string) => new GraphClient({ token, appSecret: meta.appSecret, version: meta.version, baseUrl: meta.graphUrl, sleep });
+  const track = (userId: string, kind: string, qty = 1) => db.run('INSERT INTO usage_events (user_id, kind, qty, at) VALUES (?, ?, ?, ?)', userId, kind, qty, Date.now());
 
   // ---------- helpers ----------
-  const send = (res, status, body, headers = {}) => {
+  const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}): void => {
     const isJson = typeof body !== 'string' && !Buffer.isBuffer(body);
     res.writeHead(status, { 'content-type': isJson ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8', 'cache-control': 'no-store', ...headers });
-    res.end(isJson ? JSON.stringify(body) : body);
+    res.end(isJson ? JSON.stringify(body) : (body as string | Buffer));
   };
-  const parseRaw = (raw, type) => {
+  const parseRaw = (raw: string, type: string): Row => {
     if (!raw) return {};
     if (type.includes('application/x-www-form-urlencoded')) return Object.fromEntries(new URLSearchParams(raw));
     return JSON.parse(raw);
   };
-  const readBody = (req) => new Promise((resolve, reject) => {
+  const readBody = (req: Req) => new Promise<Row>((resolve, reject) => {
     const type = req.headers['content-type'] || '';
     // Some hosts read the body before the app gets the request.
     if (req.readableEnded) {
       const b = req.body;
-      if (b && typeof b === 'object' && !Buffer.isBuffer(b)) return resolve(b);
+      if (b && typeof b === 'object' && !Buffer.isBuffer(b)) return resolve(b as Row);
       try { return resolve(parseRaw(Buffer.isBuffer(b) ? b.toString('utf8') : String(b || ''), type)); } catch { return reject(new HttpError(400, 'Invalid request body')); }
     }
-    let size = 0; const parts = [];
-    req.on('data', (c) => { size += c.length; if (size > JSON_LIMIT) { reject(new HttpError(413, 'Request too large')); req.destroy(); } else parts.push(c); });
+    let size = 0; const parts: Buffer[] = [];
+    req.on('data', (c: Buffer) => { size += c.length; if (size > JSON_LIMIT) { reject(new HttpError(413, 'Request too large')); req.destroy(); } else parts.push(c); });
     req.on('end', () => { try { resolve(parseRaw(Buffer.concat(parts).toString('utf8'), type)); } catch { reject(new HttpError(400, 'Invalid request body')); } });
     req.on('error', reject);
   });
 
-  async function sessionFrom(req) {
+  async function sessionFrom(req: Req): Promise<Session | null> {
     const sid = S.parseCookies(req.headers.cookie)[SID];
     if (!sid) return null;
     const s = await db.get('SELECT s.*, u.name, u.token_status, u.token_expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?', sid);
     if (!s || s.expires_at < Date.now()) return null;
     return s;
   }
-  async function requireUser(req, { write = false } = {}) {
+  async function requireUser(req: Req, { write = false }: { write?: boolean } = {}): Promise<Session> {
     const s = await sessionFrom(req);
     if (!s) throw new HttpError(401, 'Sign in with Meta first.');
     if (write) {
@@ -79,17 +97,17 @@ async function createApp(config, { sleep, log = console } = {}) {
     }
     return s;
   }
-  async function userToken(userId) {
+  async function userToken(userId: string): Promise<string> {
     const u = await db.get('SELECT token_enc, token_status FROM users WHERE id = ?', userId);
     if (!u || !u.token_enc || u.token_status !== 'ok') throw new HttpError(409, 'Your Meta connection has expired. Reconnect to keep syncing.', { reconnect: true });
     return S.decrypt(u.token_enc, config.key);
   }
-  async function account(userId, accountId) {
+  async function account(userId: string, accountId: string): Promise<Row> {
     const a = await db.get('SELECT * FROM ad_accounts WHERE user_id = ? AND id = ?', userId, accountId);
     if (!a) throw new HttpError(404, 'Ad account not found.');
     return a;
   }
-  const publicAccount = (a) => ({
+  const publicAccount = (a: Row) => ({
     id: a.id, name: a.name, currency: a.currency, timezone: a.timezone, selected: !!a.selected,
     autoSync: a.auto_sync === null || a.auto_sync === undefined ? true : !!a.auto_sync,
     // A step that died (host time limit, crash) leaves 'running' behind; report it as resumable.
@@ -100,7 +118,7 @@ async function createApp(config, { sleep, log = console } = {}) {
     syncedFrom: a.synced_from || (a.synced_until ? addDays(a.synced_until, -(meta.backfillDays - 1)) : null),
     historyDays: a.history_days || meta.backfillDays,
   });
-  async function upsertAccounts(userId, accts) {
+  async function upsertAccounts(userId: string, accts: Row[]): Promise<void> {
     await db.batch(accts.map((a) => [`INSERT INTO ad_accounts (id, user_id, name, currency, timezone, account_status) VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, id) DO UPDATE SET name = excluded.name, currency = excluded.currency, timezone = excluded.timezone, account_status = excluded.account_status`,
     a.id, userId, a.name, a.currency, a.timezone_name, a.account_status ?? null]));
@@ -112,7 +130,7 @@ async function createApp(config, { sleep, log = console } = {}) {
    * cron run and a button press) syncing the same account at the same time.
    * Returns the account afterwards; syncState 'partial' means "call again".
    */
-  async function runSyncStep(userId, accountId, budgetMs = config.syncStepMs) {
+  async function runSyncStep(userId: string, accountId: string, budgetMs: number = config.syncStepMs): Promise<Row> {
     const now = Date.now();
     const got = await db.run(`UPDATE ad_accounts SET sync_state = 'running', sync_error = NULL, sync_progress = 'Starting', sync_started_at = ?
       WHERE user_id = ? AND id = ? AND (sync_state != 'running' OR sync_started_at IS NULL OR sync_started_at < ?)`, now, userId, accountId, now - LEASE_MS);
@@ -122,7 +140,7 @@ async function createApp(config, { sleep, log = console } = {}) {
       c.deadline = now + Math.min(budgetMs + HARD_STOP_MS, config.hosted ? 285000 : Infinity);
       const r = await syncStep({
         db, userId, accountId, client: c, backfillDays: meta.backfillDays, deadline: now + budgetMs,
-        progress: (msg) => db.run('UPDATE ad_accounts SET sync_progress = ? WHERE user_id = ? AND id = ?', msg, userId, accountId),
+        progress: (msg: string) => db.run('UPDATE ad_accounts SET sync_progress = ? WHERE user_id = ? AND id = ?', msg, userId, accountId),
       });
       await track(userId, 'meta_api_calls', r.apiCalls);
       if (r.done) {
@@ -132,7 +150,7 @@ async function createApp(config, { sleep, log = console } = {}) {
       } else {
         await db.run(`UPDATE ad_accounts SET sync_state = 'partial', sync_progress = ? WHERE user_id = ? AND id = ?`, r.cursor ? `Continuing from ${r.cursor}` : 'Continuing', userId, accountId);
       }
-    } catch (e) {
+    } catch (e: any) {
       const kind = e instanceof MetaError ? e.kind : e.extra?.reconnect ? 'auth' : 'other';
       if (kind === 'auth') {
         await db.run(`UPDATE users SET token_status = 'reconnect' WHERE id = ?`, userId);
@@ -150,12 +168,12 @@ async function createApp(config, { sleep, log = console } = {}) {
   }
 
   /** Accurate unique reach for a range comes from Meta directly (it can't be added up from days). */
-  async function reachFor(userId, accountId, level, since, until) {
+  async function reachFor(userId: string, accountId: string, level: string, since: string, until: string): Promise<Record<string, { reach?: number; frequency?: number }>> {
     const cached = await db.get('SELECT * FROM totals_cache WHERE user_id = ? AND account_id = ? AND level = ? AND since = ? AND until = ?', userId, accountId, level, since, until);
     if (cached && Date.now() - cached.fetched_at < 6 * 3600000) return JSON.parse(cached.json);
     try {
       const rows = await client(await userToken(userId)).all(`${accountId}/insights`, { level, time_range: { since, until }, fields: `${level}_id,reach,frequency,impressions`, limit: 500 });
-      const out = {};
+      const out: Record<string, { reach?: number; frequency?: number }> = {};
       for (const r of rows) out[r[`${level}_id`]] = { reach: Number(r.reach) || undefined, frequency: Number(r.frequency) || undefined };
       await db.run(`INSERT INTO totals_cache (user_id, account_id, level, since, until, fetched_at, json) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, account_id, level, since, until) DO UPDATE SET fetched_at = excluded.fetched_at, json = excluded.json`, userId, accountId, level, since, until, Date.now(), JSON.stringify(out));
@@ -166,23 +184,23 @@ async function createApp(config, { sleep, log = console } = {}) {
     }
   }
 
-  async function deleteUser(userId) {
-    await db.batch([...USER_TABLES.map((t) => [`DELETE FROM ${t} WHERE user_id = ?`, userId]), ['DELETE FROM users WHERE id = ?', userId]]);
+  async function deleteUser(userId: string): Promise<void> {
+    await db.batch([...USER_TABLES.map((t): BatchItem => [`DELETE FROM ${t} WHERE user_id = ?`, userId]), ['DELETE FROM users WHERE id = ?', userId]]);
   }
 
   // ---------- the page ----------
   const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-  let pageCache = null;
+  let pageCache: string | null = null;
   /** The page with a fresh nonce on every <script>, and the matching Content-Security-Policy. */
-  function appPage(extraScript = '') {
+  function appPage(extraScript = ''): { html: string; headers: Record<string, string> } {
     const nonce = crypto.randomBytes(16).toString('base64');
     if (!pageCache) pageCache = fs.readFileSync(path.join(config.distDir, 'index.html'), 'utf8');
-    let html = pageCache;
+    let html: string = pageCache;
     if (extraScript) html = html.replace('<body>', () => `<body>\n<script>${extraScript}</script>`);
     html = html.replace(/<script(?=[\s>])/g, () => `<script nonce="${nonce}"`);
     return { html, headers: { ...SECURITY_HEADERS, 'content-security-policy': csp(nonce) } };
   }
-  function csp(nonce) {
+  function csp(nonce: string): string {
     return [
       "default-src 'self'",
       `script-src 'nonce-${nonce}' ${XLSX_URL}`,
@@ -196,21 +214,21 @@ async function createApp(config, { sleep, log = console } = {}) {
       "object-src 'none'",
     ].join('; ');
   }
-  const SECURITY_HEADERS = {
+  const SECURITY_HEADERS: Record<string, string> = {
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
     'x-frame-options': 'DENY',
     ...(secure ? { 'strict-transport-security': 'max-age=31536000' } : {}),
     'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
   };
-  const plainPage = (title, body) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:0 16px">${body}</body>`;
+  const plainPage = (title: string, body: string): string => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font:16px system-ui;max-width:36rem;margin:15vh auto;padding:0 16px">${body}</body>`;
 
   /**
    * Finish signing in with a Meta user token (from Facebook Login or pasted in):
    * store it encrypted, remember the ad accounts it can see, start a session.
    * Returns the session id.
    */
-  async function signInWithToken(token, expiresAt) {
+  async function signInWithToken(token: string, expiresAt: number | null): Promise<string> {
     const me = await client(token).get('me', { fields: 'id,name' });
     const now = Date.now();
     await db.run(`INSERT INTO users (id, name, token_enc, token_expires_at, token_status, created_at, last_login_at) VALUES (?, ?, ?, ?, 'ok', ?, ?)
@@ -225,7 +243,7 @@ async function createApp(config, { sleep, log = console } = {}) {
   }
 
   /** Swap a short-lived token for a 60-day one. Falls back to the original if Meta refuses. */
-  async function longLived(token) {
+  async function longLived(token: string): Promise<{ token: string; expiresAt: number | null }> {
     const g = new GraphClient({ token: '', version: meta.version, baseUrl: meta.graphUrl, sleep });
     try {
       const r = await g.getNoAuth('oauth/access_token', { grant_type: 'fb_exchange_token', client_id: meta.appId, client_secret: meta.appSecret, fb_exchange_token: token });
@@ -234,9 +252,11 @@ async function createApp(config, { sleep, log = console } = {}) {
     return { token, expiresAt: null };
   }
 
+  const isLevel = (v: string): v is EntityLevel => (LEVELS as string[]).includes(v);
+
   // ---------- routes ----------
-  const routes = [];
-  const route = (method, pattern, handler) => routes.push({ method, pattern, handler });
+  const routes: { method: string; pattern: RegExp; handler: Handler }[] = [];
+  const route = (method: string, pattern: RegExp, handler: Handler): number => routes.push({ method, pattern, handler });
 
   route('GET', /^\/api\/health$/, () => ({ ok: true, mode: config.demo ? 'demo' : 'live', apiVersion: meta.version, hosted: !!config.hosted, loginModes: config.loginModes }));
 
@@ -245,7 +265,7 @@ async function createApp(config, { sleep, log = console } = {}) {
     if (!config.loginModes.includes('oauth')) throw new HttpError(404, 'Facebook Login is switched off. Paste an access token instead.');
     const state = S.randomId(16);
     const u = new URL(`${meta.dialogUrl}/${meta.version}/dialog/oauth`);
-    u.searchParams.set('client_id', meta.appId);
+    u.searchParams.set('client_id', meta.appId ?? '');
     u.searchParams.set('redirect_uri', `${config.baseUrl}/auth/meta/callback`);
     u.searchParams.set('state', state);
     u.searchParams.set('response_type', 'code');
@@ -275,7 +295,7 @@ async function createApp(config, { sleep, log = console } = {}) {
         'cache-control': 'no-store',
       });
       res.end();
-    } catch (e) {
+    } catch (e: any) {
       log.warn?.('oauth failed: ' + e.message);
       fail();
     }
@@ -293,7 +313,7 @@ async function createApp(config, { sleep, log = console } = {}) {
     const b = await readBody(req);
     const pasted = String(b.token || '').trim();
     if (!/^[A-Za-z0-9|_\-.]{10,1000}$/.test(pasted)) throw new HttpError(400, 'That doesn\'t look like an access token. Copy the whole token from Marketing API → Tools.');
-    let perms;
+    let perms: Row[];
     try {
       // appsecret_proof is added to this call, so a token from any other app is refused by Meta.
       perms = await client(pasted).all('me/permissions', {});
@@ -370,7 +390,7 @@ async function createApp(config, { sleep, log = console } = {}) {
     const s = await requireUser(req);
     const a = await account(s.user_id, m[1]);
     const level = url.searchParams.get('level') || 'campaign';
-    if (!LEVELS.includes(level)) throw new HttpError(400, 'level must be campaign, adset or ad');
+    if (!isLevel(level)) throw new HttpError(400, 'level must be campaign, adset or ad');
     const today = todayIn(a.timezone);
     const since = url.searchParams.get('since') || addDays(today, -29);
     const until = url.searchParams.get('until') || today;
@@ -378,7 +398,7 @@ async function createApp(config, { sleep, log = console } = {}) {
     // Meta keeps 37 months of insights; anything longer only creates cache rows and API calls.
     if ((Date.parse(until) - Date.parse(since)) / DAY > 1125 || until > addDays(today, 1)) throw new HttpError(400, 'Pick a range within the last 37 months.');
     const reach = a.last_synced_at ? await reachFor(s.user_id, a.id, level, since, until) : {};
-    const built = await buildCampaigns({ db, userId: s.user_id, accountId: a.id, level, since, until, reach });
+    const built = await buildCampaigns({ db, userId: s.user_id, accountId: a.id, level, since, until, reach: reach as Record<string, { reach: number; frequency: number }> });
     return { account: publicAccount(a), level, since, until, ...built };
   });
 
@@ -405,8 +425,8 @@ async function createApp(config, { sleep, log = console } = {}) {
     const name = String(b.name || '').trim().slice(0, 120);
     if (!name) throw new HttpError(400, 'Give the comparison a name.');
     if (!Array.isArray(b.entityIds) || b.entityIds.length < 2 || b.entityIds.length > 5) throw new HttpError(400, 'Pick 2 to 5 items.');
-    const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
-    if (!/^act_\d+$/.test(String(b.accountId)) || !b.entityIds.every((x) => /^\d{1,30}$/.test(String(x)))) throw new HttpError(400, 'Invalid comparison.');
+    const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (!/^act_\d+$/.test(String(b.accountId)) || !b.entityIds.every((x: unknown) => /^\d{1,30}$/.test(String(x)))) throw new HttpError(400, 'Invalid comparison.');
     const data = { accountId: String(b.accountId), level: LEVELS.includes(b.level) ? b.level : 'campaign', preset: ['last7', 'last14', 'last30', 'last90', 'this_month', 'last_month', 'custom'].includes(b.preset) ? b.preset : 'custom', since: isDate(b.since) ? b.since : null, until: isDate(b.until) ? b.until : null, entityIds: b.entityIds.map(String) };
     const id = S.randomId(9);
     await db.run('INSERT INTO comparisons (id, user_id, name, json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', id, s.user_id, name, JSON.stringify(data), Date.now(), Date.now());
@@ -461,10 +481,10 @@ async function createApp(config, { sleep, log = console } = {}) {
       month: monthStart.toISOString().slice(0, 7),
       thisMonth: counts,
       totals: {
-        adAccountsSynced: (await db.get('SELECT COUNT(*) AS n FROM ad_accounts WHERE user_id = ? AND selected = 1', s.user_id)).n,
-        autoSyncOn: (await db.get('SELECT COUNT(*) AS n FROM ad_accounts WHERE user_id = ? AND selected = 1 AND auto_sync = 1', s.user_id)).n,
-        savedComparisons: (await db.get('SELECT COUNT(*) AS n FROM comparisons WHERE user_id = ?', s.user_id)).n,
-        activeShareLinks: (await db.get('SELECT COUNT(*) AS n FROM shares WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?', s.user_id, Date.now())).n,
+        adAccountsSynced: ((await db.get('SELECT COUNT(*) AS n FROM ad_accounts WHERE user_id = ? AND selected = 1', s.user_id)) as Row).n,
+        autoSyncOn: ((await db.get('SELECT COUNT(*) AS n FROM ad_accounts WHERE user_id = ? AND selected = 1 AND auto_sync = 1', s.user_id)) as Row).n,
+        savedComparisons: ((await db.get('SELECT COUNT(*) AS n FROM comparisons WHERE user_id = ?', s.user_id)) as Row).n,
+        activeShareLinks: ((await db.get('SELECT COUNT(*) AS n FROM shares WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?', s.user_id, Date.now())) as Row).n,
       },
     };
   });
@@ -480,7 +500,7 @@ async function createApp(config, { sleep, log = console } = {}) {
   route('POST', /^\/meta\/deauthorize$/, async (req) => {
     if (config.demo) throw new HttpError(404, 'Not found');
     const b = await readBody(req);
-    const p = S.parseSignedRequest(b.signed_request, meta.appSecret);
+    const p = S.parseSignedRequest(b.signed_request, meta.appSecret ?? '');
     if (!p || !p.user_id) throw new HttpError(400, 'Invalid signed_request');
     const uid = String(p.user_id);
     await db.batch([
@@ -493,7 +513,7 @@ async function createApp(config, { sleep, log = console } = {}) {
   route('POST', /^\/meta\/data-deletion$/, async (req) => {
     if (config.demo && !config.allowDemoCallbacks) throw new HttpError(404, 'Not found');
     const b = await readBody(req);
-    const p = S.parseSignedRequest(b.signed_request, meta.appSecret);
+    const p = S.parseSignedRequest(b.signed_request, meta.appSecret ?? '');
     if (!p || !p.user_id) throw new HttpError(400, 'Invalid signed_request');
     await deleteUser(String(p.user_id));
     const code = S.randomId(9);
@@ -508,15 +528,15 @@ async function createApp(config, { sleep, log = console } = {}) {
   route('GET', /^\/(index\.html)?$/, (req, res) => { const page = appPage(); send(res, 200, page.html, page.headers); });
 
   // ---------- dispatcher ----------
-  async function handle(req, res) {
-    const url = new URL(req.url, config.baseUrl);
+  async function handle(req: Req, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url || '/', config.baseUrl);
     const candidates = routes.filter((r) => r.pattern.test(url.pathname));
     const r = candidates.find((x) => x.method === req.method);
     try {
       if (!r) throw new HttpError(candidates.length ? 405 : 404, candidates.length ? 'Method not allowed' : 'Not found');
-      const out = await r.handler(req, res, { url, m: url.pathname.match(r.pattern) });
+      const out = await r.handler(req, res, { url, m: url.pathname.match(r.pattern) as RegExpMatchArray });
       if (out !== undefined && !res.headersSent) send(res, 200, out);
-    } catch (e) {
+    } catch (e: any) {
       const status = e instanceof HttpError ? e.status : e instanceof MetaError ? 502 : 500;
       if (status >= 500) log.error?.(e);
       if (!res.headersSent) send(res, status, { error: e instanceof HttpError || e instanceof MetaError ? e.message : 'Something went wrong on the server.', ...(e.extra || {}) });
@@ -524,7 +544,7 @@ async function createApp(config, { sleep, log = console } = {}) {
   }
 
   // ---------- daily sync: accounts with auto-sync on that are due ----------
-  async function tick({ budgetMs = config.syncStepMs } = {}) {
+  async function tick({ budgetMs = config.syncStepMs }: { budgetMs?: number } = {}) {
     const started = Date.now();
     const now = Date.now();
     const due = await db.all(`SELECT a.user_id, a.id FROM ad_accounts a JOIN users u ON u.id = a.user_id
@@ -534,10 +554,10 @@ async function createApp(config, { sleep, log = console } = {}) {
           OR (a.sync_state = 'waiting' AND a.next_attempt_at <= ?)
           OR (a.sync_state NOT IN ('waiting', 'partial') AND (a.last_synced_at IS NULL OR a.last_synced_at < ?)))`,
     now - LEASE_MS, now, now - config.syncEveryHours * 3600000 + 3600000);
-    const results = [];
+    const results: { account: string; state: string }[] = [];
     for (const d of due) {
       // Keep going while there's time; whatever is left continues on the next run.
-      let a;
+      let a: Row | undefined;
       do {
         const left = budgetMs - (Date.now() - started);
         if (left < 15000) break;
@@ -548,15 +568,18 @@ async function createApp(config, { sleep, log = console } = {}) {
     await db.run('DELETE FROM sessions WHERE expires_at < ?', Date.now());
     return { ok: true, due: due.length, results };
   }
-  let timer = null;
-  function startScheduler(everyMs = 15 * 60000) {
+  let timer: ReturnType<typeof setInterval> | null = null;
+  function startScheduler(everyMs = 15 * 60000): void {
     timer = setInterval(() => tick().catch((e) => log.error?.(e)), everyMs);
     timer.unref?.();
     setTimeout(() => tick().catch(() => {}), 5000).unref?.();
   }
 
   const server = http.createServer(handle);
-  return { server, db, handle, runSyncStep, tick, startScheduler, close: () => { clearInterval(timer); server.close(); db.close(); } };
+  return { server, db, handle, runSyncStep, tick, startScheduler, close: () => { if (timer) clearInterval(timer); server.close(); db.close(); } };
 }
 
-module.exports = { createApp };
+const api = { createApp };
+module.exports = api;
+export type AppApi = typeof api;
+export type App = Awaited<ReturnType<typeof createApp>>;

@@ -10,8 +10,9 @@
 // Daily results are stored at ad level; campaign and ad-set numbers are added up
 // from them. The last few days are always re-fetched, because Meta keeps
 // attributing leads and purchases to recent days for a while.
-'use strict';
-const M = require('./map.js');
+import type { MapApi } from './map.ts';
+import type { GraphClient } from './client.ts';
+const M: MapApi = require('./map.ts');
 
 const CAMPAIGN_FIELDS = 'id,name,objective,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time';
 const ADSET_FIELDS = 'id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,start_time,end_time,optimization_goal,targeting';
@@ -21,11 +22,11 @@ const RESETTLE_DAYS = 3;           // re-fetch this many recent days on every sy
 const UNIVERSE_TTL = 7 * 86400000; // refresh audience estimates weekly
 const CHUNK_DAYS = 30;
 
-const iso = (d) => d.toISOString().slice(0, 10);
-const addDays = (s, n) => iso(new Date(Date.parse(s + 'T00:00:00Z') + n * 86400000));
+const iso = (d: Date): string => d.toISOString().slice(0, 10);
+const addDays = (s: string, n: number): string => iso(new Date(Date.parse(s + 'T00:00:00Z') + n * 86400000));
 
 /** Today's date in the ad account's own time zone (Meta reports days in that zone). */
-function todayIn(timezone, now = new Date()) {
+function todayIn(timezone: string | null | undefined, now: Date = new Date()): string {
   try {
     return new Intl.DateTimeFormat('en-CA', { timeZone: timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   } catch {
@@ -34,8 +35,8 @@ function todayIn(timezone, now = new Date()) {
 }
 
 /** Split [since, until] into chunks of at most `days`. */
-function chunks(since, until, days) {
-  const out = [];
+function chunks(since: string, until: string, days: number): { since: string; until: string }[] {
+  const out: { since: string; until: string }[] = [];
   for (let s = since; s <= until; s = addDays(s, days)) {
     const e = addDays(s, days - 1);
     out.push({ since: s, until: e < until ? e : until });
@@ -47,11 +48,12 @@ function chunks(since, until, days) {
 const MAX_HISTORY_DAYS = 1095;
 const HISTORY_CHOICES = [90, 180, 365, 730, 1095];
 
-async function fetchDaily(client, accountId, range, onRows, depth = 0) {
+type DateRange = { since: string; until: string };
+async function fetchDaily(client: GraphClient, accountId: string, range: DateRange, onRows: (rows: Row[]) => Promise<void>, depth = 0): Promise<void> {
   try {
     const rows = await client.all(`${accountId}/insights`, { level: 'ad', time_increment: 1, time_range: range, fields: INSIGHT_FIELDS, limit: 500 });
     await onRows(rows);
-  } catch (e) {
+  } catch (e: any) {
     // Meta refuses big requests: split the range in half and try again.
     if (e.kind === 'too_much_data' && depth < 5 && range.since < range.until) {
       const days = Math.round((Date.parse(range.until) - Date.parse(range.since)) / 86400000) + 1;
@@ -74,7 +76,10 @@ const UPSERT_DAILY = `INSERT INTO daily (user_id, account_id, ad_id, adset_id, c
   ON CONFLICT(user_id, ad_id, date) DO UPDATE SET spend = excluded.spend, impressions = excluded.impressions, reach = excluded.reach, clicks = excluded.clicks,
     lpv = excluded.lpv, leads = excluded.leads, conversions = excluded.conversions, conversion_value = excluded.conversion_value, views = excluded.views`;
 
-async function syncStructure({ db, userId, accountId, client, progress, deadline }) {
+type Progress = (msg: string) => Promise<unknown> | void;
+interface StructureOpts { db: Db; userId: string; accountId: string; client: GraphClient; progress: Progress; deadline: number }
+
+async function syncStructure({ db, userId, accountId, client, progress, deadline }: StructureOpts) {
   await progress('Reading the ad account');
   const acct = await client.get(accountId, { fields: 'id,name,currency,timezone_name,account_status' });
   await db.run('UPDATE ad_accounts SET name = ?, currency = ?, timezone = ?, account_status = ? WHERE user_id = ? AND id = ?',
@@ -85,8 +90,8 @@ async function syncStructure({ db, userId, accountId, client, progress, deadline
   const adsets = await client.all(`${accountId}/adsets`, { fields: ADSET_FIELDS, limit: 200 });
   const ads = await client.all(`${accountId}/ads`, { fields: AD_FIELDS, limit: 200 });
   const t = Date.now();
-  const objectiveOf = Object.fromEntries(campaigns.map((c) => [c.id, c.objective]));
-  const writes = [];
+  const objectiveOf: Record<string, string> = Object.fromEntries(campaigns.map((c) => [c.id, c.objective]));
+  const writes: BatchItem[] = [];
   for (const c of campaigns) writes.push([UPSERT_ENTITY, userId, accountId, c.id, 'campaign', c.id, null, c.name, c.objective, c.effective_status || c.status, c.daily_budget ?? null, c.lifetime_budget ?? null, c.start_time ?? null, c.stop_time ?? null, null, null, t]);
   for (const s of adsets) writes.push([UPSERT_ENTITY, userId, accountId, s.id, 'adset', s.campaign_id, s.id, s.name, objectiveOf[s.campaign_id] ?? null, s.effective_status || s.status, s.daily_budget ?? null, s.lifetime_budget ?? null, s.start_time ?? null, s.end_time ?? null, M.targetingNotes(s.targeting) ?? null, null, t]);
   for (const a of ads) writes.push([UPSERT_ENTITY, userId, accountId, a.id, 'ad', a.campaign_id, a.adset_id, a.name, objectiveOf[a.campaign_id] ?? null, a.effective_status || a.status, null, null, null, null, null, a.creative?.thumbnail_url ?? null, t]);
@@ -102,7 +107,7 @@ async function syncStructure({ db, userId, accountId, client, progress, deadline
       const est = await client.get(`${id}/delivery_estimate`, { optimization_goal: adsets.find((s) => s.id === id)?.optimization_goal });
       const u = M.universeFromEstimate(est);
       if (u) await db.run('UPDATE entities SET universe = ?, universe_at = ? WHERE user_id = ? AND id = ?', u, Date.now(), userId, id);
-    } catch (e) {
+    } catch (e: any) {
       if (e.kind === 'auth' || e.kind === 'rate_limit') throw e;
       estimateErrors++;
     }
@@ -112,30 +117,27 @@ async function syncStructure({ db, userId, accountId, client, progress, deadline
 
 /**
  * Run one step of a sync.
- * @param {object} o
- * @param {object} o.db
- * @param {string} o.userId
- * @param {string} o.accountId     act_…
- * @param {GraphClient} o.client
- * @param {number} [o.backfillDays]  how far back the first sync goes
- * @param {number} [o.deadline]      ms timestamp; the step stops starting new work after it
- * @param {(msg:string)=>Promise|void} [o.progress]
- * @returns {Promise<{done:boolean, rows:number, apiCalls:number, ...}>}
+ *  - accountId: act_…
+ *  - backfillDays: how far back the first sync goes
+ *  - deadline: ms timestamp; the step stops starting new work after it
  */
-async function syncStep({ db, userId, accountId, client, backfillDays = 90, deadline = Infinity, progress = async () => {}, now = new Date() }) {
+interface SyncOpts { db: Db; userId: string; accountId: string; client: GraphClient; backfillDays?: number; deadline?: number; progress?: Progress; now?: Date }
+interface SyncResult { done: boolean; rows: number; apiCalls: number; cursor?: string | null; since?: string; until?: string; note?: string | null; [k: string]: unknown }
+
+async function syncStep({ db, userId, accountId, client, backfillDays = 90, deadline = Infinity, progress = async () => {}, now = new Date() }: SyncOpts): Promise<SyncResult> {
   const startedCalls = client.calls;
   const row = await db.get('SELECT sync_cursor, synced_until, synced_from, sync_run_from, history_days, timezone FROM ad_accounts WHERE user_id = ? AND id = ?', userId, accountId);
   const historyDays = Math.min(MAX_HISTORY_DAYS, row?.history_days || backfillDays);
   let cursor = row?.sync_cursor;
-  let structure = null;
+  let structure: Awaited<ReturnType<typeof syncStructure>> | null = null;
   let timezone = row?.timezone;
 
-  const outOfTime = (e) => e && e.kind === 'deadline';
+  const outOfTime = (e: any): boolean => e && e.kind === 'deadline';
   // Fresh sync: refresh the structure first, then decide which days to fetch.
   if (!cursor) {
     try {
       structure = await syncStructure({ db, userId, accountId, client, progress, deadline });
-    } catch (e) {
+    } catch (e: any) {
       // Ran out of time: start again next step (audience sizes already fetched are kept).
       if (outOfTime(e)) return { done: false, cursor: null, rows: 0, apiCalls: client.calls - startedCalls };
       throw e;
@@ -170,7 +172,7 @@ async function syncStep({ db, userId, accountId, client, backfillDays = 90, dead
         }));
         rowsSaved += rows.length;
       });
-    } catch (e) {
+    } catch (e: any) {
       // Out of time mid-chunk: this chunk is fetched again next step (rows are upserted, so no duplicates).
       if (outOfTime(e)) return { done: false, cursor: parts[i].since, rows: rowsSaved, apiCalls: client.calls - startedCalls, ...structure };
       throw e;
@@ -194,10 +196,13 @@ async function syncStep({ db, userId, accountId, client, backfillDays = 90, dead
 }
 
 /** Run steps until the sync is complete (local use and tests). */
-async function syncAccount(o) {
-  let r;
+async function syncAccount(o: SyncOpts): Promise<SyncResult> {
+  let r: SyncResult;
   do { r = await syncStep(o); } while (!r.done);
   return r;
 }
 
-module.exports = { syncStep, syncAccount, todayIn, chunks, addDays, INSIGHT_FIELDS, MAX_HISTORY_DAYS, HISTORY_CHOICES };
+const api = { syncStep, syncAccount, todayIn, chunks, addDays, INSIGHT_FIELDS, MAX_HISTORY_DAYS, HISTORY_CHOICES };
+module.exports = api;
+export type SyncApi = typeof api;
+export type { SyncOpts, SyncResult };

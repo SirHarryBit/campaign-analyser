@@ -11,12 +11,12 @@ const ROOT = __dirname;
 const XLSX_CDN = '<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>';
 const read = (p: string): string => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-/** Browser scripts in load order. `.ts` files have their types removed. */
-const SOURCES = ['core.js', 'charts.ts', 'sample.js', 'app.ts'];
+/** Browser scripts in load order. Their types are removed before they go into the page. */
+const SOURCES = ['core.ts', 'charts.ts', 'sample.ts', 'app.ts'];
 
 function toJs(name: string): string {
   const code = read('src/' + name);
-  return name.endsWith('.ts') ? stripTypeScriptTypes(code, { mode: 'strip' }) : code;
+  return stripTypeScriptTypes(code, { mode: 'strip' });
 }
 
 const page = read('src/page.html');

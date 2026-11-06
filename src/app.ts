@@ -1,4 +1,4 @@
-/* Campaign Analyser — browser UI. Depends on core.js (CampaignCore), charts.ts (CampaignCharts), sample.js (SAMPLE_CSV) and SheetJS (XLSX). */
+/* Campaign Analyser — browser UI. Depends on core.ts (CampaignCore), charts.ts (CampaignCharts), sample.ts (SAMPLE_CSV) and SheetJS (XLSX). */
 (function () {
   'use strict';
 
@@ -27,6 +27,7 @@
     tab: string; editingId: string | null; server: Health | null; source: Source; wantSource: Source;
     fileStash: FileStash | null; meta: MetaState; viewer: ShareSnapshot | null; trendMetric: string | null;
     compareView: CompareView; lastResult?: CompareResult;
+    listView: ListViewOpts;
   }
   class ApiError extends Error {
     status = 0;
@@ -58,6 +59,7 @@
     viewer: null,          // a shared, read-only snapshot
     trendMetric: null,
     compareView: 'overview',
+    listView: { q: '', status: 'all', sort: 'default' },  // list tools: search text (not saved), status filter and sort (saved)
   };
   let editorDraft: Campaign | null = null;
 
@@ -68,7 +70,7 @@
       const files: FileStash | null = state.source === 'files' ? { campaigns: state.campaigns, selected: [...state.selected], isExample: state.isExample } : state.fileStash;
       const m = state.meta;
       const metaPrefs = { accountId: m.accountId, level: m.level, preset: m.preset, since: m.since, until: m.until, selected: state.source === 'meta' ? [...state.selected] : m.selectedIds };
-      localStorage.setItem(STORE_KEY, JSON.stringify({ files, settings: state.settings, tab: state.tab, source: state.source, metaPrefs, compareView: state.compareView }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ files, settings: state.settings, tab: state.tab, source: state.source, metaPrefs, compareView: state.compareView, listView: { status: state.listView.status, sort: state.listView.sort } }));
     } catch (e) { /* storage unavailable: fine */ }
   }
   function load(): boolean {
@@ -84,6 +86,10 @@
       state.tab = d.tab || 'campaigns';
       state.wantSource = d.source || 'files';
       if (VIEWS.some(([v]) => v === d.compareView)) state.compareView = d.compareView;
+      if (d.listView) {
+        if (['all', 'active', 'inactive'].includes(d.listView.status)) state.listView.status = d.listView.status;
+        if (['default', 'newest', 'oldest', 'name'].includes(d.listView.sort)) state.listView.sort = d.listView.sort;
+      }
       if (d.metaPrefs) {
         const p = d.metaPrefs;
         Object.assign(state.meta, { accountId: p.accountId || null, level: p.level || 'campaign', preset: p.preset || 'last30', since: p.since || null, until: p.until || null, selectedIds: p.selected || [], pendingSelection: (p.selected || []).length ? p.selected : null });
@@ -237,7 +243,47 @@
       host.innerHTML = `<div class="empty"><p class="empty-title">No campaigns yet</p><p>Upload an export from Meta Ads Manager or Google Ads, add a campaign by hand, or load the example data to see how it works.</p></div>`;
       return;
     }
-    const rows = state.campaigns.map((c) => {
+    host.innerHTML = '<div id="list-tools"></div><div id="list-body"></div>';
+    renderListTools();
+    renderListBody();
+  }
+
+  const startOf = (c: Campaign): string => String(c.startedAt || c.startDate || '').slice(0, 10);
+  const SORTS: [ListSort, string][] = [['newest', 'Newest start first'], ['oldest', 'Oldest start first'], ['name', 'Name A–Z']];
+
+  /** Search box, status buttons and sort menu. Built once per list render so typing never loses focus. */
+  function renderListTools(): void {
+    const lv = state.listView;
+    const def = state.source === 'meta' ? 'Biggest spend first' : 'As imported';
+    $('#list-tools').innerHTML = `<div class="list-tools">
+      <label class="lt-search" for="l-q"><span class="sr">Search by name</span><input type="search" id="l-q" placeholder="Search by name…" value="${esc(lv.q)}" autocomplete="off" spellcheck="false"></label>
+      <div class="seg" id="l-status" role="group" aria-label="Status">${([['all', 'All'], ['active', 'Active'], ['inactive', 'Inactive']] as [StatusFilter, string][]).map(([v, l]) => `<button type="button" data-lstatus="${v}" aria-pressed="${lv.status === v}">${l} <span class="n" data-lcount="${v}"></span></button>`).join('')}</div>
+      <button type="button" class="btn small ghost" data-lcsv="1" title="Download what is shown, in this order, with a totals row">Export CSV</button>
+      <span id="list-dl-status" role="status"></span>
+      <label class="lt-sort" for="l-sort">Sort<select id="l-sort"><option value="default" ${lv.sort === 'default' ? 'selected' : ''}>${def}</option>${SORTS.map(([v, l]) => `<option value="${v}" ${lv.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div>`;
+  }
+
+  /** Keeps the status counts and pressed state current without rebuilding the search box. */
+  function syncListTools(view: ListViewResult): void {
+    const box = $('#l-status');
+    if (!box) return;
+    box.hidden = !view.anyStatus;   // a CSV with no status column has nothing to filter on
+    for (const k of ['all', 'active', 'inactive'] as StatusFilter[]) { const n = $(`[data-lcount="${k}"]`, box); if (n) n.textContent = String(view.counts[k]); }
+    for (const b of $$('[data-lstatus]', box)) b.setAttribute('aria-pressed', String(b.dataset.lstatus === state.listView.status));
+  }
+
+  function renderListBody(): void {
+    const view = C.listView(state.campaigns, state.listView);
+    syncListTools(view);
+    const body = $('#list-body');
+    if (!view.items.length) {
+      body.innerHTML = `<div class="empty"><p class="empty-title">No match</p><p>${state.listView.q.trim() ? `Nothing here matches “${esc(state.listView.q.trim())}”${state.listView.status !== 'all' ? ` among ${state.listView.status} ones` : ''}.` : `None of these are ${state.listView.status}.`}</p><button class="btn small" data-lclear="1">Clear search and filter</button></div>`;
+      return;
+    }
+    const tot = C.listTotals(view.items);
+    const hiddenSel = [...state.selected].filter((id) => !view.items.some((c) => c.id === id)).length;
+    const rows = view.items.map((c) => {
       const m = C.computeMetrics(c);
       const t = C.classifyTargeting(c, state.settings);
       const miss = gapsFor(c);
@@ -248,7 +294,7 @@
       const thumb = c.thumbnailUrl ? `<img class="thumb" src="${esc(c.thumbnailUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '';
       return `<tr>
         <td class="sel"><input type="checkbox" id="sel-${esc(c.id)}" data-select="${esc(c.id)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} aria-label="Compare ${esc(c.name)}"></td>
-        <th scope="row" class="cname"><div class="cn-row">${thumb}<div><span class="dot s${checked ? colorSlot(c.id) : 0}" aria-hidden="true"></span>${esc(c.name)}${status}<span class="sub">${parent ? esc(parent) + ' · ' : ''}${esc(c.platform || 'Other')} · ${esc(objLabel(c.objective))}${m.days ? ' · ' + m.days + ' days' : ''}</span></div></div></th>
+        <th scope="row" class="cname"><div class="cn-row">${thumb}<div><span class="dot s${checked ? colorSlot(c.id) : 0}" aria-hidden="true"></span>${esc(c.name)}${status}<span class="sub">${parent ? esc(parent) + ' · ' : ''}${esc(c.platform || 'Other')} · ${esc(objLabel(c.objective))}${m.days ? ' · ' + m.days + ' days' : ''}${startOf(c) ? ' · started ' + fmtDay(startOf(c)) : ''}</span></div></div></th>
         <td><span class="chip t-${t.type}" title="${esc(t.reason)}">${esc(tLabel(t.type))}</span></td>
         <td>${funnelChips(c)}</td>
         <td class="num">${money(m.spend)}</td>
@@ -258,10 +304,11 @@
         <td class="act">${miss.length ? `<button class="btn small warn" data-edit="${esc(c.id)}">Fill ${miss.length} gap${miss.length === 1 ? '' : 's'}</button>` : `<button class="btn small ghost" data-edit="${esc(c.id)}">Edit</button>`}</td>
       </tr>`;
     }).join('');
-    host.innerHTML = `<div class="table-wrap"><table class="ctable">
+    body.innerHTML = `<div class="table-wrap"><table class="ctable">
       <thead><tr><th class="sel"><span class="sr">Compare</span></th><th>Campaign</th><th>Targeting</th><th>Funnel</th><th class="num">Spend</th><th class="num">Leads</th><th class="num">CPL</th><th class="num">Qualified</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
-      <p class="hint">${state.source === 'meta' && state.meta.range ? `Showing ${LEVEL_LABELS[state.meta.level].toLowerCase()} that spent between ${fmtDay(state.meta.range.since)} and ${fmtDay(state.meta.range.until)}, biggest first. ` : ''}Tick up to ${MAX_COMPARE}, then open <b>Compare</b>. Funnel chips: <span class="lv aim">L4</span> aimed at, <span class="lv data">L3</span> has data only.</p>`;
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="totals" title="Added up across what is shown. Cost per lead and qualified % only use rows that track leads."><td></td><th scope="row">Total · ${tot.count} shown</th><td></td><td></td><td class="num">${money(tot.spend)}</td><td class="num">${C.fmtInt(tot.leads)}</td><td class="num">${money(tot.cpl)}</td><td class="num">${C.fmtPct(tot.qualifiedPct)}</td><td></td></tr></tfoot></table></div>
+      <p class="hint">${state.source === 'meta' && state.meta.range ? `Showing ${LEVEL_LABELS[state.meta.level].toLowerCase()} that spent between ${fmtDay(state.meta.range.since)} and ${fmtDay(state.meta.range.until)}${state.listView.sort === 'default' ? ', biggest first' : ''}. ` : ''}${hiddenSel ? `${hiddenSel} ticked ${hiddenSel === 1 ? 'item is' : 'items are'} hidden by the search or filter and still count for Compare. ` : ''}Tick up to ${MAX_COMPARE}, then open <b>Compare</b>. Funnel chips: <span class="lv aim">L4</span> aimed at, <span class="lv data">L3</span> has data only.</p>`;
   }
 
   // ---------- Editor ----------
@@ -590,7 +637,7 @@
     const owner = state.server && state.meta.me && !state.viewer;
     const actions = `<div class="cmp-actions">
         ${owner ? `<span class="owner-only" style="display:contents">${state.source === 'meta' ? '<button class="btn ghost small" data-act="save-cmp">Save</button>' : ''}<button class="btn ghost small" data-act="share">Share</button></span>` : ''}
-        <details class="menu"><summary class="btn small">Download</summary><div class="menu-list" role="group" aria-label="Download"><button data-dl="html">Report (HTML)</button><button data-dl="csv">Data (CSV)</button><button data-dl="xlsx">Workbook (XLSX)</button></div></details>
+        <details class="menu"><summary class="btn small">Download</summary><div class="menu-list" role="group" aria-label="Download"><button data-dl="pdf">Report (PDF)</button><button data-dl="html">Report (HTML)</button><button data-dl="csv">Data (CSV)</button><button data-dl="xlsx">Workbook (XLSX)</button></div></details>
         <span id="dl-status" role="status"></span></div>`;
     const forms = owner ? `<form class="inline-form owner-only" id="save-cmp-row" hidden><label class="sr" for="save-cmp-name">Name</label><input id="save-cmp-name" maxlength="120" placeholder="Name this comparison, e.g. Lead forms vs lookalike" required><button class="btn small" type="submit">Save</button><button class="btn ghost small" type="button" data-act="save-cmp-cancel">Cancel</button></form>
         <div class="share-out owner-only" id="share-out" hidden></div>` : '';
@@ -635,8 +682,8 @@
       <p class="muted">To save as PDF: open this file in a browser and use Print → Save as PDF.</p></body></html>`;
   }
 
-  async function offerFile(filename: string, data: string | Blob, mime: string): Promise<void> {
-    const status = $('#dl-status');
+  async function offerFile(filename: string, data: string | Blob, mime: string, statusSel = '#dl-status'): Promise<void> {
+    const status = $(statusSel);
     status.textContent = '';
     try {
       const dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
@@ -661,10 +708,43 @@
     status.textContent = 'Download started.';
   }
 
+  /** The campaign list as it is on screen (filter, search and sort applied), plus a totals row. */
+  function exportList(): void {
+    const view = C.listView(state.campaigns, state.listView);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const what = state.source === 'meta' ? LEVEL_LABELS[state.meta.level].toLowerCase().replace(/ /g, '-') : 'campaigns';
+    if (!view.items.length) { $('#list-dl-status').textContent = 'Nothing to export with this search and filter.'; return; }
+    offerFile(`${what}-${stamp}.csv`, C.listToCsv(view.items), 'text/csv', '#list-dl-status');
+  }
+
+  /**
+   * PDF through the browser's own print dialog (Save as PDF): the text stays selectable and the charts stay sharp.
+   * The report is loaded into a hidden frame so the app page itself is never printed.
+   */
+  function printReport(r: CompareResult): void {
+    const status = $('#dl-status');
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+    frame.srcdoc = reportHtml(r).replace('To save as PDF: open this file in a browser and use Print → Save as PDF.', '');
+    frame.onload = () => {
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        status.textContent = 'In the print window, choose Save as PDF.';
+      } catch (e) {
+        status.textContent = 'Printing is blocked here. Download the HTML report and print it from your browser.';
+      }
+      setTimeout(() => frame.remove(), 60000);
+    };
+    document.body.appendChild(frame);
+  }
+
   function download(kind: string): void {
     const r = state.lastResult;
     if (!r) return;
     const stamp = new Date().toISOString().slice(0, 10);
+    if (kind === 'pdf') { printReport(r); return; }
     if (kind === 'html') offerFile(`campaign-report-${stamp}.html`, reportHtml(r), 'text/html');
     if (kind === 'csv') offerFile(`campaign-comparison-${stamp}.csv`, C.toCsv(r), 'text/csv');
     if (kind === 'xlsx') {
@@ -1152,6 +1232,9 @@
       const d = t.dataset;
       if (d.source) { switchSource(d.source as Source); return; }
       if (d.level) { state.meta.level = d.level as Level; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }
+      if (d.lstatus) { state.listView.status = d.lstatus as StatusFilter; save(); renderListBody(); return; }
+      if (d.lcsv) { exportList(); return; }
+      if (d.lclear) { state.listView.q = ''; state.listView.status = 'all'; save(); renderListTools(); renderListBody(); return; }
       if (d.act) { handleMetaAction(t); return; }
       if (d.history) { setHistory(Number(d.history)); return; }
       if (d.themeSet) { setTheme(d.themeSet === 'dark' ? 'dark' : 'light'); return; }
@@ -1192,9 +1275,14 @@
     document.addEventListener('pointerdown', (e) => {
       for (const m of $$<HTMLDetailsElement>('details.menu[open]')) if (!m.contains(e.target as Node)) m.removeAttribute('open');
     });
+    document.addEventListener('input', (e) => {
+      const el = e.target as HTMLInputElement;
+      if (el.id === 'l-q') { state.listView.q = el.value; renderListBody(); }
+    });
     document.addEventListener('change', (e) => {
       const el = e.target as HTMLInputElement;
       const tid = el.id;
+      if (tid === 'l-sort') { state.listView.sort = el.value as ListSort; save(); renderListBody(); return; }
       if (tid === 'm-autosync') { setAutoSync(el.checked); return; }
       if (tid === 'm-history') { setHistory(Number(el.value)); return; }
       if (tid === 'm-account') { state.meta.accountId = el.value; state.selected = new Set(); save(); loadEntities({ keepSelection: false }); return; }

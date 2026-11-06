@@ -1,5 +1,5 @@
 /* Example data for a fictional business ("Lakeside Yoga Studio"). Not real campaigns. */
-(function (root) {
+(function (root: { SAMPLE_CSV?: string }) {
   const SAMPLE_CSV = [
     'Campaign name,Platform,Objective,Reporting starts,Reporting ends,Budget,Amount spent (INR),Impressions,Reach,Link clicks,Landing page views,Leads,Qualified leads,Audience size,Targeting',
     'Example – Open audience lead form,Meta,Leads,2026-08-01,2026-08-21,60000,58200,512000,201000,6140,,412,78,24000000,Advantage+ audience; Mumbai 25-45',
@@ -9,4 +9,4 @@
   ].join('\n');
   root.SAMPLE_CSV = SAMPLE_CSV;
   if (typeof module !== 'undefined' && module.exports) module.exports = { SAMPLE_CSV };
-})(typeof window !== 'undefined' ? window : globalThis);
+})(typeof window !== 'undefined' ? window : (globalThis as { SAMPLE_CSV?: string }));

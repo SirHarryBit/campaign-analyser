@@ -30,6 +30,7 @@ You need **Node 22.13 or newer** and no npm packages.
 npm start      # builds the page and starts the server at http://localhost:8787
 npm test       # 67 tests: engine, charts, Meta mapping, and the full server against a simulated Meta API on both databases
 npm run typecheck   # TypeScript check (after npm install)
+# CI (.github/workflows/ci.yml) runs typecheck, tests and build on every push and pull request.
 ```
 
 - Without a `.env`, the server runs in **demo mode** with a simulated ad account. Paste `demo-short-token` into the token box (or use "Continue with Facebook") to try every feature without a Meta app.
@@ -57,7 +58,7 @@ Hobby is for non-commercial use. Locally there are no npm dependencies; hosted, 
 
 ```
 Browser (dist/index.html)            Node server (server/)                    Meta
-  src/core.js   analysis engine   <-- /api/accounts/:id/entities <-- SQLite <-- sync.js <-- Marketing API v25
+  src/core.ts   analysis engine   <-- /api/accounts/:id/entities <-- SQLite <-- sync.ts <-- Marketing API v25
   src/charts.ts SVG charts            /api/entities/:id/manual                     (daily, plus "Sync now")
   src/app.ts    UI                    /api/comparisons, /api/shares, /r/:token
                                       /auth/meta/token  (pasted token; or OAuth)
@@ -66,19 +67,19 @@ Browser (dist/index.html)            Node server (server/)                    Me
 
 | Path | What it is |
 |---|---|
-| `src/core.js` | The engine: parsing, column mapping, metrics, funnel, targeting, comparison, rules-based insights and recommendations. Pure functions, shared by browser and tests. |
+| `src/core.ts` | The engine: parsing, column mapping, metrics, funnel, targeting, comparison, rules-based insights and recommendations. Pure functions, shared by browser and tests. |
 | `src/charts.ts` | Dependency-free SVG charts (donuts, rings, mirrored gradient columns, bubble map, timeline, smoothed trend lines), shared by the app and the downloaded report. |
 | `src/app.ts`, `src/page.html` | Browser UI (Overview, Charts, Details and Fixes views), styles and the in-app guide. |
 | `src/types.d.ts` | Shared types for the engine, charts and UI. |
 | `build.ts` | Builds `dist/`: strips TypeScript types with Node's built-in stripper, so building needs no npm packages. |
-| `server/meta/client.js` | Graph API client: cursor paging, `appsecret_proof`, back-off on rate limits using Meta's usage headers, error classification. |
-| `server/meta/map.js` | Meta → analyser mapping: leads from `actions` without double counting, budgets in paise (lifetime budgets pro-rated to the range), objectives, targeting notes, audience estimates. |
-| `server/meta/sync.js` | Resumable, incremental sync in time-boxed steps (fits serverless limits). The first run backfills 90 days; later runs re-fetch the last 3 days, because attribution keeps settling. Ranges Meta refuses as too large are split in half. A database lease stops two syncs of the same account. |
-| `server/entities.js` | Builds campaign / ad set / ad objects for a date range from daily rows, merged with your manual inputs. |
-| `server/app.js` | HTTP API (node:http), sessions, CSRF, share links, usage metering, Meta deletion callbacks, scheduler. |
-| `server/db.js` | One async storage interface on two backends: Node's built-in SQLite (local) and Turso/libSQL (Vercel). Schema and column migrations. |
-| `api/index.js`, `vercel.json` | Vercel entry point: one function serves everything; daily cron at 00:30 UTC. |
-| `mock/meta-mock.js` | A simulated Marketing API: same endpoints and shapes, made-up data, optional rate-limit errors. |
+| `server/meta/client.ts` | Graph API client: cursor paging, `appsecret_proof`, back-off on rate limits using Meta's usage headers, error classification. |
+| `server/meta/map.ts` | Meta → analyser mapping: leads from `actions` without double counting, budgets in paise (lifetime budgets pro-rated to the range), objectives, targeting notes, audience estimates. |
+| `server/meta/sync.ts` | Resumable, incremental sync in time-boxed steps (fits serverless limits). The first run backfills 90 days; later runs re-fetch the last 3 days, because attribution keeps settling. Ranges Meta refuses as too large are split in half. A database lease stops two syncs of the same account. |
+| `server/entities.ts` | Builds campaign / ad set / ad objects for a date range from daily rows, merged with your manual inputs. |
+| `server/app.ts` | HTTP API (node:http), sessions, CSRF, share links, usage metering, Meta deletion callbacks, scheduler. |
+| `server/db.ts` | One async storage interface on two backends: Node's built-in SQLite (local) and Turso/libSQL (Vercel). Schema and column migrations. |
+| `api/index.ts`, `vercel.json` | Vercel entry point: one function serves everything; daily cron at 00:30 UTC. |
+| `mock/meta-mock.ts` | A simulated Marketing API: same endpoints and shapes, made-up data, optional rate-limit errors. |
 | `tests/` | Engine, charts, Meta mapping and client, and end-to-end server tests. |
 
 ## Security and privacy
@@ -96,7 +97,7 @@ Browser (dist/index.html)            Node server (server/)                    Me
 ## Design decisions
 - **TypeScript without a build toolchain.** The browser code is TypeScript using only erasable syntax, so Node's built-in type stripping turns it into JavaScript at build time; `tsc` is used only for checking. The server is still JavaScript.
 - **Almost no dependencies.** Node built-ins (`node:http`, `node:sqlite`, `fetch`, `crypto`), one CDN script (SheetJS, for Excel files), and `@libsql/client` only when hosted.
-- **Serverless-ready.** The same request handler runs under `node server/index.js` and as a single Vercel function. Syncs are resumable steps, not long background jobs.
+- **Serverless-ready.** The same request handler runs under `node server/index.ts` and as a single Vercel function. Syncs are resumable steps, not long background jobs.
 - **Rules before AI.** Every verdict comes from a named, testable rule over computed metrics, so it can be explained.
 - **Daily rows at ad level, added up on demand.** Any level and any date range work without re-fetching. Unique reach is the exception, because it can't be added up, so it is fetched live for the range and cached.
 - **A simulated Meta API** for demo mode and tests, so the whole flow is tested without a real ad account or network access.
@@ -108,3 +109,9 @@ Phase 2:
 - scheduled email reports
 - AI-written explanations grounded in the computed numbers
 - qualified leads imported by Meta Lead ID
+
+## List tools
+
+For campaigns, ad sets and ads alike: filter by status (Active / Inactive / All), search by name (also matches the parent ad set and campaign), and sort by date started. A totals row sums what is shown (cost per lead and qualified % only use rows that track leads). **Export CSV** downloads the list exactly as shown, with the totals row.
+
+**Download → Report (PDF)** opens your browser's print dialog; choose *Save as PDF*.
