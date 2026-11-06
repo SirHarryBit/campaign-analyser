@@ -32,4 +32,25 @@ const standalone =
   '<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>\n' +
   '</head>\n<body>\n' + body + '</body>\n</html>\n';
 fs.writeFileSync(path.join(out, 'index.html'), standalone);
-console.log(`built dist/artifact.html (${Math.floor(Buffer.byteLength(body) / 1024)} KB) and dist/index.html`);
+/**
+ * The server as plain JavaScript in dist/server/, for hosts (Vercel) whose runtime cannot be trusted to
+ * strip types or to find `.ts` files. Same code, types removed, `require('./x.ts')` pointed at `./x.js`.
+ */
+function emitServer(dir = '', count = 0): number {
+  const src = path.join(ROOT, 'server', dir);
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const rel = path.join(dir, entry.name);
+    if (entry.isDirectory()) { count = emitServer(rel, count); continue; }
+    if (!entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts')) continue;
+    const js = stripTypeScriptTypes(read(path.join('server', rel)), { mode: 'strip' })
+      .replace(/(require\(\s*['"][^'"]+)\.ts(['"])/g, '$1.js$2');
+    const target = path.join(out, 'server', rel.replace(/\.ts$/, '.js'));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, js);
+    count++;
+  }
+  return count;
+}
+fs.rmSync(path.join(out, 'server'), { recursive: true, force: true });
+const serverFiles = emitServer();
+console.log(`built dist/artifact.html (${Math.floor(Buffer.byteLength(body) / 1024)} KB) and dist/index.html, plus ${serverFiles} server files as JavaScript in dist/server/`);
